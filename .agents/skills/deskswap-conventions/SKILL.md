@@ -11,10 +11,15 @@ this skill wins.
 
 ## Product model
 
-- **Shared pool (default):** desktops `1…N` are global. Each monitor shows exactly one; a desktop
-  is shown on at most one monitor. Windows belong to a desktop and move with it between monitors.
-- **Swap on conflict:** selecting a desktop already visible on another monitor swaps the two monitors' desktops.
-- **Monitor-owned mode (setting):** each monitor owns its desktops, numbered globally (macOS "Displays have separate Spaces").
+`docs/design.md` is the source of truth for behavior. Read the relevant section before implementing
+or changing behavior, and update it in the same change when a decision changes. In short:
+
+- **Shared pool:** desktops `1…N` are global. Each monitor shows exactly one; a desktop is shown on at
+  most one monitor. Windows belong to a desktop and move with it between monitors.
+- **Swap on conflict:** going to a desktop already shown on another monitor swaps the two monitors' desktops.
+  Next/previous skip desktops shown elsewhere and stop at the ends.
+- **macOS-style lifecycle:** desktops are added and removed only explicitly. Empty desktops are kept, and numbers never shift on their own.
+- Shortcuts act on the monitor under the mouse cursor.
 - Deskswap does **not** use or patch Windows' own virtual desktops. It hides/shows top-level windows
   and takes over the desktop shortcuts with a low-level keyboard hook.
 - Never use undocumented virtual-desktop COM interfaces or inject into `explorer.exe`. The only
