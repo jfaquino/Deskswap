@@ -139,5 +139,60 @@ public class ShortcutMatcherTests
         Assert.Equal(9, ShortcutMap.Defaults.Bindings.Values.Count(a => a.Command == ShortcutCommand.GoToDesktop));
     }
 
+    [Fact]
+    public void Shortcuts_work_after_pause_even_if_releases_were_missed()
+    {
+        // Win+Ctrl+Shift+F12 pauses; the hook stops matching before the keys are released.
+        Press(VirtualKeys.LeftWin);
+        Press(VirtualKeys.LeftControl);
+        Press(VirtualKeys.LeftShift);
+        Assert.Equal(new ShortcutAction(ShortcutCommand.TogglePause), _matcher.OnKey(VirtualKeys.F12, isDown: true).Action);
+
+        // After resuming, the physical keyboard says only Win+Ctrl are held.
+        var decision = _matcher.OnKey(VirtualKeys.Right, isDown: true, physicalModifiers: KeyModifiers.Win | KeyModifiers.Ctrl);
+
+        Assert.Equal(new ShortcutAction(ShortcutCommand.NextDesktop), decision.Action);
+    }
+
+    [Fact]
+    public void Key_whose_release_was_missed_is_not_swallowed_on_its_next_plain_press()
+    {
+        Press(VirtualKeys.LeftWin);
+        Press(VirtualKeys.LeftControl);
+        Press(VirtualKeys.LeftShift);
+        _matcher.OnKey(VirtualKeys.F12, isDown: true);
+
+        var plainF12 = _matcher.OnKey(VirtualKeys.F12, isDown: true, physicalModifiers: KeyModifiers.None);
+
+        Assert.Equal(KeyDecision.PassThrough, plainF12);
+    }
+
+    [Fact]
+    public void Observe_keeps_state_current_while_matching_is_off()
+    {
+        Press(VirtualKeys.LeftWin);
+        Press(VirtualKeys.LeftControl);
+        _matcher.OnKey(VirtualKeys.Right, isDown: true);
+
+        _matcher.Observe(VirtualKeys.Right, isDown: false);
+        _matcher.Observe(VirtualKeys.LeftControl, isDown: false);
+        _matcher.Observe(VirtualKeys.LeftWin, isDown: false);
+
+        Assert.Equal(KeyModifiers.None, _matcher.HeldModifiers);
+        Assert.Equal(KeyDecision.PassThrough, _matcher.OnKey(VirtualKeys.Right, isDown: true));
+    }
+
+    [Fact]
+    public void Paused_map_only_matches_the_pause_toggle()
+    {
+        var paused = new ShortcutMatcher(ShortcutMap.Defaults.Only(ShortcutCommand.TogglePause));
+        paused.OnKey(VirtualKeys.LeftWin, isDown: true);
+        paused.OnKey(VirtualKeys.LeftControl, isDown: true);
+
+        Assert.Equal(KeyDecision.PassThrough, paused.OnKey(VirtualKeys.Right, isDown: true));
+        paused.OnKey(VirtualKeys.LeftShift, isDown: true);
+        Assert.Equal(new ShortcutAction(ShortcutCommand.TogglePause), paused.OnKey(VirtualKeys.F12, isDown: true).Action);
+    }
+
     private void Press(int key) => Assert.Equal(KeyDecision.PassThrough, _matcher.OnKey(key, isDown: true));
 }

@@ -31,7 +31,7 @@ public sealed class KeyboardHook : IDisposable
     private uint _threadId;
     private int _startError;
     private volatile bool _resetRequested;
-    private volatile bool _enabled = true;
+    private ShortcutMap? _pendingMap;
 
     /// <summary>Initializes a new instance of the <see cref="KeyboardHook"/> class.</summary>
     /// <param name="map">The shortcuts to take over.</param>
@@ -42,12 +42,12 @@ public sealed class KeyboardHook : IDisposable
         _onAction = onAction ?? throw new ArgumentNullException(nameof(onAction));
     }
 
-    /// <summary>Gets or sets a value indicating whether shortcuts are taken over. When disabled, every key passes through.</summary>
-    public bool Enabled
-    {
-        get => _enabled;
-        set => _enabled = value;
-    }
+    /// <summary>
+    /// Replaces the shortcuts to take over, e.g. only the pause toggle while paused. Takes effect on the next key
+    /// event; key state is kept, so keys held across the change are not misread.
+    /// </summary>
+    /// <param name="map">The new shortcuts.</param>
+    public void SetMap(ShortcutMap map) => Volatile.Write(ref _pendingMap, map ?? throw new ArgumentNullException(nameof(map)));
 
     /// <summary>Installs the hook on a dedicated thread.</summary>
     /// <exception cref="Win32Exception">Windows refused to install the hook.</exception>
@@ -115,7 +115,7 @@ public sealed class KeyboardHook : IDisposable
 
     private unsafe LRESULT OnKeyboardEvent(int code, WPARAM wParam, LPARAM lParam)
     {
-        if (code >= 0 && _enabled)
+        if (code >= 0)
         {
             var data = (KBDLLHOOKSTRUCT*)lParam.Value;
             if (data->dwExtraInfo != InjectedMarker && Decide(data->vkCode, (uint)wParam.Value))
@@ -138,8 +138,13 @@ public sealed class KeyboardHook : IDisposable
                 _matcher.Reset();
             }
 
+            if (Interlocked.Exchange(ref _pendingMap, null) is { } map)
+            {
+                _matcher.Map = map;
+            }
+
             bool isDown = message is PInvoke.WM_KEYDOWN or PInvoke.WM_SYSKEYDOWN;
-            var decision = _matcher.OnKey((int)virtualKey, isDown);
+            var decision = _matcher.OnKey((int)virtualKey, isDown, isDown ? PhysicalModifiers() : null);
             if (decision.SuppressStartMenu)
             {
                 InjectUnassignedKey();
@@ -158,6 +163,38 @@ public sealed class KeyboardHook : IDisposable
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Reads which modifiers are physically held. Inside a low-level hook this reflects every event before the
+    /// current one, so it is exact for the modifiers of a shortcut and immune to missed key releases.
+    /// </summary>
+    private static KeyModifiers PhysicalModifiers()
+    {
+        static bool IsDown(int key) => (PInvoke.GetAsyncKeyState(key) & 0x8000) != 0;
+
+        var held = KeyModifiers.None;
+        if (IsDown(VirtualKeys.LeftWin) || IsDown(VirtualKeys.RightWin))
+        {
+            held |= KeyModifiers.Win;
+        }
+
+        if (IsDown(VirtualKeys.Control))
+        {
+            held |= KeyModifiers.Ctrl;
+        }
+
+        if (IsDown(VirtualKeys.Shift))
+        {
+            held |= KeyModifiers.Shift;
+        }
+
+        if (IsDown(VirtualKeys.Menu))
+        {
+            held |= KeyModifiers.Alt;
+        }
+
+        return held;
     }
 
     /// <summary>

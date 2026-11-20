@@ -62,3 +62,10 @@ WM_KEYUP
 WM_SYSKEYDOWN
 WM_SYSKEYUP
 WM_QUIT
+
+// Deskswap's own windows
+DwmSetWindowAttribute
+DWM_WINDOW_CORNER_PREFERENCE
+DestroyIcon
+GetAsyncKeyState
+IsHungAppWindow

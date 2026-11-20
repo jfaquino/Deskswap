@@ -1,19 +1,55 @@
+using System.Globalization;
 using Deskswap.Core;
+using Deskswap.Platform;
 
 namespace Deskswap.App;
 
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static int Main(string[] args)
     {
+        // Watchdog mode: no UI; wait for the main process to exit, then show any window it left hidden (design §8.2).
+        if (args.Length == 3 && args[0] == Watchdog.Switch
+            && int.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out int watchedProcessId))
+        {
+            int restored = Watchdog.Run(watchedProcessId, args[2]);
+            if (restored > 0)
+            {
+                Log.Info($"Watchdog restored {restored} hidden windows.");
+            }
+
+            return 0;
+        }
+
         using var singleInstance = new Mutex(initiallyOwned: true, $@"Local\{ProductInfo.Name}.SingleInstance", out bool isFirstInstance);
         if (!isFirstInstance)
         {
-            return;
+            return 0;
         }
 
         ApplicationConfiguration.Initialize();
-        Application.Run(new TrayApplicationContext());
+
+        // Must be set before any control exists on this thread.
+        TrayApplicationContext? context = null;
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) =>
+        {
+            if (context is null)
+            {
+                Log.Error("Unhandled exception during startup.", e.Exception);
+            }
+            else
+            {
+                context.OnUnhandledException(e.Exception);
+            }
+        };
+
+        using (context = new TrayApplicationContext())
+        {
+            Application.Run(context);
+        }
+
+        return 0;
     }
 }

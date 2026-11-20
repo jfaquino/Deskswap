@@ -13,7 +13,6 @@ public class DesktopPoolSnapshotTests
         PlaceWindow(pool, W(3), 3, Left);
         pool.AddWindow(W(1), Left);
         pool.GoTo(Left, 3);
-        pool.NoteActiveWindow(W(3));
 
         var restored = DesktopPool.Restore(pool.ToSnapshot(), [Left, Right]);
 
@@ -22,7 +21,6 @@ public class DesktopPoolSnapshotTests
             restored.GetDesktops().Select(d => (d.Id, d.Number, d.Name, d.ShownOn)));
         Assert.Equal(3, NumberOf(restored, W(3)));
         Assert.Equal(1, NumberOf(restored, W(1)));
-        Assert.Equal(new FocusRequest(Left, W(3)), RoundTripFocus(restored));
         AssertInvariants(restored);
     }
 
@@ -71,11 +69,5 @@ public class DesktopPoolSnapshotTests
         Assert.Equal(1, restored.GetShownNumber(Left));
         Assert.Equal(2, restored.GetShownNumber(Right));
         AssertInvariants(restored);
-    }
-
-    private static FocusRequest? RoundTripFocus(DesktopPool pool)
-    {
-        pool.GoTo(Left, 4);
-        return pool.GoTo(Left, 3).Focus;
     }
 }

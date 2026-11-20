@@ -33,17 +33,16 @@ public class DesktopPoolWindowTests
     }
 
     [Fact]
-    public void RemoveWindow_forgets_it_and_its_focus()
+    public void RemoveWindow_forgets_it()
     {
         var pool = Pool(3);
         pool.AddWindow(W(1), Left);
-        pool.NoteActiveWindow(W(1));
 
         Assert.True(pool.RemoveWindow(W(1)));
 
         Assert.False(pool.TryGetDesktopOf(W(1), out _));
-        pool.GoTo(Left, 3);
-        Assert.Equal(new FocusRequest(Left, null), pool.GoTo(Left, 1).Focus);
+        Assert.False(pool.RemoveWindow(W(1)));
+        Assert.Empty(pool.GoTo(Left, 3).Show);
     }
 
     [Fact]

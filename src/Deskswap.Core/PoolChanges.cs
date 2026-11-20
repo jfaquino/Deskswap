@@ -52,10 +52,12 @@ public sealed record Indicator(MonitorId Monitor, int Number, string? Name, Indi
 /// <param name="To">The monitor the window must move to.</param>
 public sealed record WindowRelocation(WindowId Window, MonitorId From, MonitorId To);
 
-/// <summary>A request to give focus to a window on a monitor.</summary>
+/// <summary>
+/// A request to focus the desktop now shown on a monitor: its top-most window, which (with the stacking order kept)
+/// is the window that was active when that desktop was left.
+/// </summary>
 /// <param name="Monitor">The monitor whose desktop should receive focus.</param>
-/// <param name="Window">The preferred window, or <see langword="null"/> to focus the top-most window of that desktop.</param>
-public sealed record FocusRequest(MonitorId Monitor, WindowId? Window);
+public sealed record FocusRequest(MonitorId Monitor);
 
 /// <summary>
 /// The effects of a pool operation that the platform layer must apply, in this order: hide, relocate, show,
@@ -115,7 +117,7 @@ internal sealed class ChangeBuilder
         }
     }
 
-    public void Focus(MonitorId monitor, WindowId? window) => _focus = new FocusRequest(monitor, window);
+    public void Focus(MonitorId monitor) => _focus = new FocusRequest(monitor);
 
     public void Indicate(Indicator indicator) => _indicators.Add(indicator);
 

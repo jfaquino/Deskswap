@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AppTooltip" xml:space="preserve"><value>Deskswap — intercambia escritorios entre tus monitores</value></data>
+  <data name="AppTooltipPaused" xml:space="preserve"><value>Deskswap (en pausa)</value></data>
+  <data name="MenuShowAllAndPause" xml:space="preserve"><value>Mostrar todas las ventanas y pausar</value></data>
+  <data name="MenuResume" xml:space="preserve"><value>Reanudar</value></data>
+  <data name="MenuExit" xml:space="preserve"><value>Salir</value></data>
+  <data name="DesktopNumber" xml:space="preserve"><value>Escritorio {0}</value></data>
+  <data name="IndicatorAdded" xml:space="preserve"><value>Nuevo escritorio</value></data>
+  <data name="IndicatorRemoved" xml:space="preserve"><value>Escritorio eliminado</value></data>
+  <data name="IndicatorEdge" xml:space="preserve"><value>No hay más escritorios en esa dirección</value></data>
+  <data name="IndicatorNotAvailable" xml:space="preserve"><value>El escritorio {0} no existe</value></data>
+  <data name="IndicatorMaximumReached" xml:space="preserve"><value>Puedes tener hasta {0} escritorios</value></data>
+  <data name="IndicatorMinimumReached" xml:space="preserve"><value>Cada monitor necesita un escritorio</value></data>
+  <data name="NotifyPaused" xml:space="preserve"><value>Deskswap está en pausa y todas las ventanas están visibles. Elige Reanudar en el menú de la bandeja para continuar.</value></data>
+  <data name="NotifyRecovered" xml:space="preserve"><value>Se restauraron {0} ventanas que una sesión anterior dejó ocultas.</value></data>
+  <data name="NotifyError" xml:space="preserve"><value>Algo salió mal, así que Deskswap mostró todas las ventanas y se pausó. Los detalles están en el registro.</value></data>
+  <data name="NotifyHookFailed" xml:space="preserve"><value>Deskswap no pudo tomar el control de sus atajos de teclado. Los detalles están en el registro.</value></data>
+  <data name="NotifyLayoutReset" xml:space="preserve"><value>La distribución de escritorios guardada estaba dañada, así que Deskswap empezó de cero. Se guardó una copia de seguridad.</value></data>
+</root>

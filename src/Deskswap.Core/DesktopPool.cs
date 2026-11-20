@@ -73,7 +73,7 @@ public sealed class DesktopPool
                 continue;
             }
 
-            var desktop = new DesktopState(saved.Id, saved.Name) { LastMonitor = saved.LastMonitor, LastActive = saved.LastActive };
+            var desktop = new DesktopState(saved.Id, saved.Name) { LastMonitor = saved.LastMonitor };
             pool._desktops.Add(desktop);
             byId.Add(saved.Id, desktop);
         }
@@ -119,21 +119,13 @@ public sealed class DesktopPool
             }
         }
 
-        foreach (var desktop in pool._desktops)
-        {
-            if (desktop.LastActive is { } active && !desktop.Windows.Contains(active))
-            {
-                desktop.LastActive = null;
-            }
-        }
-
         return pool;
     }
 
     /// <summary>Saves the pool so it can be restored with <see cref="Restore"/>.</summary>
     /// <returns>A snapshot of the current state.</returns>
     public PoolSnapshot ToSnapshot() => new(
-        [.. _desktops.Select(d => new DesktopSnapshot(d.Id, d.Name, d.LastMonitor, d.LastActive))],
+        [.. _desktops.Select(d => new DesktopSnapshot(d.Id, d.Name, d.LastMonitor))],
         [.. _monitors.Select(m => new MonitorAssignment(m, _shown[m].Id))],
         [.. _windowDesktop.Select(pair => new WindowAssignment(pair.Key, pair.Value.Id))]);
 
@@ -321,14 +313,12 @@ public sealed class DesktopPool
                 changes.Show(window);
             }
 
-            var focus = removed.LastActive ?? replacement.LastActive;
             MoveAllWindows(removed, replacement);
             _desktops.Remove(removed);
             _shown[monitor] = replacement;
             replacement.ShownOn = monitor;
             replacement.LastMonitor = monitor;
-            replacement.LastActive = focus;
-            changes.Focus(monitor, focus);
+            changes.Focus(monitor);
             changes.Indicate(IndicatorFor(monitor, replacement, IndicatorKind.Removed));
         }
         else
@@ -398,22 +388,7 @@ public sealed class DesktopPool
         }
 
         desktop.Windows.Remove(window);
-        if (desktop.LastActive == window)
-        {
-            desktop.LastActive = null;
-        }
-
         return true;
-    }
-
-    /// <summary>Records that a window became the active (foreground) window, so switching back focuses it.</summary>
-    /// <param name="window">The window.</param>
-    public void NoteActiveWindow(WindowId window)
-    {
-        if (_windowDesktop.TryGetValue(window, out var desktop))
-        {
-            desktop.LastActive = window;
-        }
     }
 
     /// <summary>Reassigns a window the user moved to another monitor to the desktop shown there.</summary>
@@ -573,7 +548,7 @@ public sealed class DesktopPool
         }
 
         SetShown(target, incoming);
-        changes.Focus(target, incoming.LastActive);
+        changes.Focus(target);
         changes.Indicate(IndicatorFor(target, incoming, kind));
     }
 
@@ -597,7 +572,7 @@ public sealed class DesktopPool
         b.ShownOn = b.LastMonitor = target;
         a.ShownOn = a.LastMonitor = other;
 
-        changes.Focus(target, b.LastActive);
+        changes.Focus(target);
         changes.Indicate(IndicatorFor(target, b, IndicatorKind.Switched));
         changes.Indicate(IndicatorFor(other, a, IndicatorKind.Switched));
     }
@@ -631,14 +606,7 @@ public sealed class DesktopPool
         _windowDesktop[window] = desktop;
     }
 
-    private static void Unassign(WindowId window, DesktopState desktop)
-    {
-        desktop.Windows.Remove(window);
-        if (desktop.LastActive == window)
-        {
-            desktop.LastActive = null;
-        }
-    }
+    private static void Unassign(WindowId window, DesktopState desktop) => desktop.Windows.Remove(window);
 
     private void MoveAllWindows(DesktopState from, DesktopState to)
     {
@@ -661,7 +629,5 @@ public sealed class DesktopPool
         public MonitorId? ShownOn { get; set; }
 
         public MonitorId? LastMonitor { get; set; }
-
-        public WindowId? LastActive { get; set; }
     }
 }

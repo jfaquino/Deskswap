@@ -78,7 +78,6 @@ public class DesktopPoolLifecycleTests
         PlaceWindow(pool, W(1), 1, Left);
         pool.GoTo(Left, 3);              // Left=3, desktop 1 free
         pool.AddWindow(W(3), Left);
-        pool.NoteActiveWindow(W(3));
 
         var changes = pool.RemoveDesktop(3, Left);
 
@@ -87,7 +86,7 @@ public class DesktopPoolLifecycleTests
         Assert.Equal(1, NumberOf(pool, W(3)));
         Assert.Equal([W(1)], changes.Show);
         Assert.Empty(changes.Hide); // W(3) stays visible
-        Assert.Equal(new FocusRequest(Left, W(3)), changes.Focus);
+        Assert.Equal(new FocusRequest(Left), changes.Focus);
         Assert.Equal(new Indicator(Left, 1, null, IndicatorKind.Removed), Assert.Single(changes.Indicators));
         AssertInvariants(pool);
     }

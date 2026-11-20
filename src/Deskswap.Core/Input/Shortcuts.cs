@@ -130,8 +130,8 @@ public enum ShortcutCommand
     /// <summary>Remove the desktop shown on the target monitor.</summary>
     RemoveDesktop,
 
-    /// <summary>Show every hidden window and pause Deskswap.</summary>
-    ShowAllAndPause,
+    /// <summary>Show every hidden window and pause Deskswap; when paused, resume.</summary>
+    TogglePause,
 }
 
 /// <summary>A command with its argument (the desktop number for <see cref="ShortcutCommand.GoToDesktop"/>).</summary>
@@ -167,6 +167,12 @@ public sealed class ShortcutMap
     /// <summary>Gets all bindings.</summary>
     public IReadOnlyDictionary<KeyChord, ShortcutAction> Bindings => _bindings;
 
+    /// <summary>Returns a map with only the bindings for one command, e.g. the pause toggle while paused.</summary>
+    /// <param name="command">The command to keep.</param>
+    /// <returns>The filtered map.</returns>
+    public ShortcutMap Only(ShortcutCommand command) =>
+        new(_bindings.Where(pair => pair.Value.Command == command).ToDictionary(pair => pair.Key, pair => pair.Value));
+
     /// <summary>Looks up the action bound to a chord.</summary>
     /// <param name="chord">The chord.</param>
     /// <param name="action">The bound action, when the method returns <see langword="true"/>.</param>
@@ -182,7 +188,7 @@ public sealed class ShortcutMap
             [new(winCtrl, VirtualKeys.Right)] = new(ShortcutCommand.NextDesktop),
             [new(winCtrl, VirtualKeys.D)] = new(ShortcutCommand.AddDesktop),
             [new(winCtrl, VirtualKeys.F4)] = new(ShortcutCommand.RemoveDesktop),
-            [new(winCtrl | KeyModifiers.Shift, VirtualKeys.F12)] = new(ShortcutCommand.ShowAllAndPause),
+            [new(winCtrl | KeyModifiers.Shift, VirtualKeys.F12)] = new(ShortcutCommand.TogglePause),
         };
 
         for (int n = 1; n <= 9; n++)
@@ -237,8 +243,56 @@ public sealed class ShortcutMatcher(ShortcutMap map)
     /// <summary>Processes one key event.</summary>
     /// <param name="virtualKey">The virtual-key code.</param>
     /// <param name="isDown"><see langword="true"/> for key down (including auto-repeat), <see langword="false"/> for key up.</param>
+    /// <param name="physicalModifiers">
+    /// The modifiers actually held according to the keyboard, if known. Preferred over the tracked state, which can
+    /// go stale when key releases are missed (lock screen, UAC prompts, other hooks).
+    /// </param>
     /// <returns>What to do with the event.</returns>
-    public KeyDecision OnKey(int virtualKey, bool isDown)
+    public KeyDecision OnKey(int virtualKey, bool isDown, KeyModifiers? physicalModifiers = null)
+    {
+        if (VirtualKeys.ModifierOf(virtualKey) != KeyModifiers.None)
+        {
+            Observe(virtualKey, isDown);
+            return KeyDecision.PassThrough;
+        }
+
+        if (!isDown)
+        {
+            // Swallow the release of a key whose press we swallowed, so apps never see half a keystroke.
+            return _swallowedKeys.Remove(virtualKey) ? new KeyDecision(true, null, false) : KeyDecision.PassThrough;
+        }
+
+        var held = physicalModifiers ?? HeldModifiers;
+        bool bound = Map.TryGetAction(new KeyChord(held, virtualKey), out var action);
+
+        if (_swallowedKeys.Contains(virtualKey))
+        {
+            if (bound)
+            {
+                // Auto-repeat while the shortcut is still held: keep swallowing, run the action once per press.
+                return new KeyDecision(true, null, false);
+            }
+
+            // The release was missed (e.g. shortcuts were switched off meanwhile); this is a fresh press.
+            _swallowedKeys.Remove(virtualKey);
+        }
+
+        if (!bound)
+        {
+            return KeyDecision.PassThrough;
+        }
+
+        _swallowedKeys.Add(virtualKey);
+        return new KeyDecision(true, action, held.HasFlag(KeyModifiers.Win));
+    }
+
+    /// <summary>
+    /// Tracks a key event without matching it, for when shortcuts are switched off. Keeps modifier state current and
+    /// forgets swallowed keys once released, so nothing is stale when matching resumes.
+    /// </summary>
+    /// <param name="virtualKey">The virtual-key code.</param>
+    /// <param name="isDown"><see langword="true"/> for key down, <see langword="false"/> for key up.</param>
+    public void Observe(int virtualKey, bool isDown)
     {
         if (VirtualKeys.ModifierOf(virtualKey) != KeyModifiers.None)
         {
@@ -250,30 +304,11 @@ public sealed class ShortcutMatcher(ShortcutMap map)
             {
                 _heldModifierKeys.Remove(virtualKey);
             }
-
-            return KeyDecision.PassThrough;
         }
-
-        if (!isDown)
+        else if (!isDown)
         {
-            // Swallow the release of a key whose press we swallowed, so apps never see half a keystroke.
-            return _swallowedKeys.Remove(virtualKey) ? new KeyDecision(true, null, false) : KeyDecision.PassThrough;
+            _swallowedKeys.Remove(virtualKey);
         }
-
-        if (_swallowedKeys.Contains(virtualKey))
-        {
-            // Auto-repeat of a shortcut key: keep swallowing, but run the action only once per press.
-            return new KeyDecision(true, null, false);
-        }
-
-        var held = HeldModifiers;
-        if (!Map.TryGetAction(new KeyChord(held, virtualKey), out var action))
-        {
-            return KeyDecision.PassThrough;
-        }
-
-        _swallowedKeys.Add(virtualKey);
-        return new KeyDecision(true, action, held.HasFlag(KeyModifiers.Win));
     }
 
     /// <summary>Forgets all held keys, e.g. after the session was locked and key releases may have been missed.</summary>

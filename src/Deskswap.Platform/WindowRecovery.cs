@@ -15,17 +15,14 @@ public static class WindowRecovery
     {
         ArgumentNullException.ThrowIfNull(journal);
         var startTimes = new Dictionary<uint, long>();
-        int restored = 0;
-        foreach (var entry in journal.Entries)
-        {
-            if (WindowInspector.IsAlive(entry.Window, startTimes)
-                && !WindowInspector.IsVisible((nint)entry.Handle)
-                && WindowOperations.Show(entry.Window))
-            {
-                restored++;
-            }
-        }
+        var hidden = journal.Entries
+            .Where(e => WindowInspector.IsAlive(e.Window, startTimes) && !WindowInspector.IsVisible((nint)e.Handle))
+            .Select(e => e.Window)
+            .ToList();
 
+        // On top, so the user actually sees them come back. No order was recorded by this process; the current
+        // z-order of hidden windows is the best guess.
+        int restored = WindowOperations.ShowStacked(WindowOperations.TopMostFirst(hidden).Reverse());
         journal.Clear();
         return restored;
     }

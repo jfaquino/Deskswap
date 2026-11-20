@@ -98,18 +98,13 @@ public class DesktopPoolSwitchingTests
     }
 
     [Fact]
-    public void GoTo_focuses_the_last_active_window_of_the_incoming_desktop()
+    public void Switching_requests_focus_on_the_target_monitor_and_swap_too()
     {
         var pool = Pool(3);
-        PlaceWindow(pool, W(3), 3, Left);
-        PlaceWindow(pool, W(4), 3, Left);
-        pool.GoTo(Left, 3);
-        pool.NoteActiveWindow(W(4));
-        pool.GoTo(Left, 1);
 
-        var changes = pool.GoTo(Left, 3);
-
-        Assert.Equal(new FocusRequest(Left, W(4)), changes.Focus);
+        Assert.Equal(new FocusRequest(Left), pool.GoTo(Left, 3).Focus);
+        Assert.Equal(new FocusRequest(Right), pool.GoTo(Right, 3).Focus); // swap: Right takes desktop 3
+        Assert.Null(pool.GoTo(Left, 7).Focus); // not available: nothing to focus
     }
 
     [Fact]

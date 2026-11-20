@@ -39,6 +39,9 @@ public sealed class WindowInspector
         return windows;
     }
 
+    /// <summary>Gets the current foreground window.</summary>
+    public static nint ForegroundWindow => ToNint(PInvoke.GetForegroundWindow());
+
     /// <summary>Gets a value indicating whether a window is visible (it may be minimized).</summary>
     /// <param name="window">The window handle.</param>
     /// <returns><see langword="true"/> if the window has the visible style.</returns>

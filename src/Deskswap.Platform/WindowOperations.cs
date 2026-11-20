@@ -23,6 +23,53 @@ public static class WindowOperations
     public static bool Show(WindowId window) =>
         PInvoke.ShowWindowAsync(new HWND((nint)window.Handle), SHOW_WINDOW_CMD.SW_SHOWNA);
 
+    /// <summary>Sorts windows by their current place in the z-order, top-most first.</summary>
+    /// <param name="windows">The windows.</param>
+    /// <returns>The windows, top-most first; windows that no longer exist come last.</returns>
+    public static IReadOnlyList<WindowId> TopMostFirst(IEnumerable<WindowId> windows)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+        var position = WindowInspector.EnumerateTopLevel()
+            .Select((handle, index) => (handle, index))
+            .ToDictionary(x => x.handle, x => x.index);
+        return [.. windows.OrderBy(w => position.GetValueOrDefault((nint)w.Handle, int.MaxValue))];
+    }
+
+    /// <summary>
+    /// Shows windows on top of all others without activating them, in the given order: each window lands on top
+    /// of the previous one, so pass them bottom-most first to rebuild a stack.
+    /// </summary>
+    /// <remarks>
+    /// Windows places every window it shows on top, and asynchronous calls may run in any order, so this uses
+    /// synchronous calls. A window that isn't responding gets the asynchronous <see cref="Show"/> instead, so a
+    /// hung application can never block Deskswap.
+    /// </remarks>
+    /// <param name="bottomMostFirst">The windows, bottom-most first.</param>
+    /// <returns>The number of windows shown or posted.</returns>
+    public static int ShowStacked(IEnumerable<WindowId> bottomMostFirst)
+    {
+        ArgumentNullException.ThrowIfNull(bottomMostFirst);
+        int shown = 0;
+        foreach (var window in bottomMostFirst)
+        {
+            var hwnd = new HWND((nint)window.Handle);
+            bool ok = PInvoke.IsHungAppWindow(hwnd)
+                ? PInvoke.ShowWindowAsync(hwnd, SHOW_WINDOW_CMD.SW_SHOWNA)
+                : PInvoke.SetWindowPos(
+                    hwnd,
+                    HWND.Null, // HWND_TOP
+                    0,
+                    0,
+                    0,
+                    0,
+                    SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_NOMOVE
+                        | SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_NOOWNERZORDER);
+            shown += ok ? 1 : 0;
+        }
+
+        return shown;
+    }
+
     /// <summary>
     /// Moves a window from one monitor to another, keeping its relative position (design §3.5). Maximized and
     /// minimized windows keep their state on the new monitor.
@@ -106,14 +153,37 @@ public static class WindowOperations
 
         placement.rcNormalPosition = new RECT(moved.Left, moved.Top, moved.Right, moved.Bottom);
 
-        // Maximized: SW_SHOWMAXIMIZED re-maximizes on the monitor of the new restore rectangle. For a hidden window
-        // this shows it early, which is fine: relocated windows are shown right after (PoolChanges order).
-        // Minimized: keep it minimized and never activate it.
-        if (placement.showCmd == SHOW_WINDOW_CMD.SW_SHOWMINIMIZED)
+        // Update only the restore rectangle; keep the current visibility and state, and never activate.
+        bool visible = PInvoke.IsWindowVisible(hwnd);
+        bool maximized = PInvoke.IsZoomed(hwnd);
+        placement.showCmd = !visible ? SHOW_WINDOW_CMD.SW_HIDE
+            : maximized ? SHOW_WINDOW_CMD.SW_SHOWNA
+            : SHOW_WINDOW_CMD.SW_SHOWMINNOACTIVE;
+        if (!PInvoke.SetWindowPlacement(hwnd, in placement))
         {
-            placement.showCmd = SHOW_WINDOW_CMD.SW_SHOWMINNOACTIVE;
+            return false;
         }
 
-        return PInvoke.SetWindowPlacement(hwnd, in placement);
+        // Re-applying "maximized" does not move a window that is already maximized, so move it while it stays
+        // maximized: same overhang around the work area, on the target monitor.
+        return !maximized || MoveMaximized(hwnd, from, to);
+    }
+
+    private static bool MoveMaximized(HWND hwnd, DisplayMonitor from, DisplayMonitor to)
+    {
+        if (!PInvoke.GetWindowRect(hwnd, out var rect))
+        {
+            return false;
+        }
+
+        var current = MonitorLayout.ToScreenRect(rect);
+        return PInvoke.SetWindowPos(
+            hwnd,
+            HWND.Null,
+            to.WorkArea.Left + (current.Left - from.WorkArea.Left),
+            to.WorkArea.Top + (current.Top - from.WorkArea.Top),
+            current.Width + (to.WorkArea.Width - from.WorkArea.Width),
+            current.Height + (to.WorkArea.Height - from.WorkArea.Height),
+            SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_NOOWNERZORDER);
     }
 }

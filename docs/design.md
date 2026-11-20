@@ -59,8 +59,9 @@ leaves the others alone. Deskswap keeps **one shared pool of desktops**, and eac
 | **Next / previous** (`Win+Ctrl+→/←`) | Move the target monitor to the next/previous desktop number that **isn't shown on another monitor** (skip those). At the end, stop: no wrap, indicator only. |
 | **Swap** | Each monitor shows the other's desktop. Windows travel with their desktop (§3.5). |
 
-On every switch: remember the active window of the outgoing desktop, then focus the remembered
-window of the incoming desktop (or its top-most window).
+On every switch the incoming desktop's windows come back **in the stacking order they had** (Windows puts
+every shown window on top, so they are shown bottom-most first), and its top-most window gets focus. That
+is the window that was active when the desktop was left, so no separate "last active" tracking is needed.
 
 ### 3.4 Moving windows
 
@@ -159,7 +160,7 @@ low-level keyboard hook.
 | `Win+Ctrl+D` | Add a desktop and switch the target monitor to it |
 | `Win+Ctrl+F4` | Remove the desktop shown on the target monitor |
 | `Win+Tab` | Toggle the Deskswap overview on every monitor |
-| `Win+Ctrl+Shift+F12` | **Emergency:** show all windows and pause Deskswap |
+| `Win+Ctrl+Shift+F12` | **Emergency:** show all windows and pause Deskswap; press again to resume |
 
 - **Touchpad:** Windows gestures don't send keys by default. The help screen explains how to set the
   4-finger swipes to custom shortcuts in Settings → Bluetooth & devices → Touchpad → Advanced gestures:
@@ -220,7 +221,8 @@ Owned windows (dialogs, tool palettes) follow their owner automatically when the
 3. **Startup recovery:** on start, show every window left in the journal (checking pid + start time so
    a reused handle isn't touched), then rebuild state.
 4. **Show all windows** (tray menu, and `Win+Ctrl+Shift+F12`): shows everything and pauses Deskswap
-   until resumed.
+   until resumed from the tray menu or by pressing `Win+Ctrl+Shift+F12` again. While paused, every other
+   shortcut is left to Windows.
 5. **Exit, update, uninstall:** show every hidden window first.
 6. **Any unexpected error** in a switch or move: show all windows of the affected monitor, log the
    error, and keep running. Never crash with windows hidden.

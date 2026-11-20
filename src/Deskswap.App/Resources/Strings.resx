@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AppTooltip" xml:space="preserve"><value>Deskswap — swap desktops between your monitors</value></data>
+  <data name="AppTooltipPaused" xml:space="preserve"><value>Deskswap (paused)</value></data>
+  <data name="MenuShowAllAndPause" xml:space="preserve"><value>Show all windows and pause</value></data>
+  <data name="MenuResume" xml:space="preserve"><value>Resume</value></data>
+  <data name="MenuExit" xml:space="preserve"><value>Exit</value></data>
+  <data name="DesktopNumber" xml:space="preserve"><value>Desktop {0}</value></data>
+  <data name="IndicatorAdded" xml:space="preserve"><value>New desktop</value></data>
+  <data name="IndicatorRemoved" xml:space="preserve"><value>Desktop removed</value></data>
+  <data name="IndicatorEdge" xml:space="preserve"><value>No more desktops this way</value></data>
+  <data name="IndicatorNotAvailable" xml:space="preserve"><value>Desktop {0} doesn't exist</value></data>
+  <data name="IndicatorMaximumReached" xml:space="preserve"><value>You can have up to {0} desktops</value></data>
+  <data name="IndicatorMinimumReached" xml:space="preserve"><value>Each monitor needs a desktop</value></data>
+  <data name="NotifyPaused" xml:space="preserve"><value>Deskswap is paused and all windows are visible. Choose Resume in the tray menu to continue.</value></data>
+  <data name="NotifyRecovered" xml:space="preserve"><value>Restored {0} windows left hidden by a previous session.</value></data>
+  <data name="NotifyError" xml:space="preserve"><value>Something went wrong, so Deskswap showed all windows and paused. Details are in the log.</value></data>
+  <data name="NotifyHookFailed" xml:space="preserve"><value>Deskswap couldn't take over its keyboard shortcuts. Details are in the log.</value></data>
+  <data name="NotifyLayoutReset" xml:space="preserve"><value>The saved desktop layout was damaged, so Deskswap started fresh. A backup was kept.</value></data>
+</root>

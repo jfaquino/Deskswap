@@ -13,8 +13,7 @@ public sealed record PoolSnapshot(
 /// <param name="Id">The desktop's id.</param>
 /// <param name="Name">The desktop's name, if any.</param>
 /// <param name="LastMonitor">The monitor that showed the desktop most recently, if any.</param>
-/// <param name="LastActive">The window that was active on the desktop most recently, if any.</param>
-public sealed record DesktopSnapshot(DesktopId Id, string? Name, MonitorId? LastMonitor, WindowId? LastActive);
+public sealed record DesktopSnapshot(DesktopId Id, string? Name, MonitorId? LastMonitor);
 
 /// <summary>A monitor and the desktop it showed.</summary>
 /// <param name="Monitor">The monitor.</param>
