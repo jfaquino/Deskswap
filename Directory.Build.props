@@ -5,6 +5,10 @@
     <Authors>Deskswap contributors</Authors>
     <Product>Deskswap</Product>
     <Description>Swap virtual desktops between monitors on Windows — one shared pool of desktops, each monitor shows one.</Description>
+    <Copyright>Copyright (c) 2026 jfaquino</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/jfaquino/Deskswap</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
 
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
