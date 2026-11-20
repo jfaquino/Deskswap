@@ -205,8 +205,9 @@ Deskswap manages a window only if **all** of these hold:
 - not a shell or system class: `Progman`, `WorkerW`, `Shell_TrayWnd`, `Shell_SecondaryTrayWnd`,
   `Windows.UI.Core.CoreWindow`, `XamlExplorerHostIslandWindow`, and others found by testing;
 - not one of Deskswap's own windows;
-- on the **current Windows desktop** (documented `IVirtualDesktopManager.IsWindowOnCurrentVirtualDesktop`).
-  Users should keep a single Windows desktop.
+- on the **current Windows desktop**. Windows cloaks windows on other Windows desktops, so the cloaked check
+  already excludes them. The documented `IVirtualDesktopManager.IsWindowOnCurrentVirtualDesktop` is a fallback,
+  used only if testing shows gaps. Users should keep a single Windows desktop.
 
 Owned windows (dialogs, tool palettes) follow their owner automatically when the owner is hidden or shown.
 
