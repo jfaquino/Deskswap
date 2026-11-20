@@ -137,6 +137,7 @@ public class ShortcutMatcherTests
 
         Assert.Equal(Enum.GetValues<ShortcutCommand>().ToHashSet(), commands);
         Assert.Equal(9, ShortcutMap.Defaults.Bindings.Values.Count(a => a.Command == ShortcutCommand.GoToDesktop));
+        Assert.Equal(9, ShortcutMap.Defaults.Bindings.Values.Count(a => a.Command == ShortcutCommand.MoveWindowToDesktop));
     }
 
     [Fact]
@@ -192,6 +193,18 @@ public class ShortcutMatcherTests
         Assert.Equal(KeyDecision.PassThrough, paused.OnKey(VirtualKeys.Right, isDown: true));
         paused.OnKey(VirtualKeys.LeftShift, isDown: true);
         Assert.Equal(new ShortcutAction(ShortcutCommand.TogglePause), paused.OnKey(VirtualKeys.F12, isDown: true).Action);
+    }
+
+    [Fact]
+    public void Win_Ctrl_Shift_Right_moves_the_window_and_Win_Ctrl_Shift_P_pins_it()
+    {
+        Press(VirtualKeys.LeftWin);
+        Press(VirtualKeys.LeftControl);
+        Press(VirtualKeys.LeftShift);
+
+        Assert.Equal(new ShortcutAction(ShortcutCommand.MoveWindowToNextDesktop), _matcher.OnKey(VirtualKeys.Right, isDown: true).Action);
+        Assert.Equal(new ShortcutAction(ShortcutCommand.MoveWindowToDesktop, 3), _matcher.OnKey(VirtualKeys.Digit(3), isDown: true).Action);
+        Assert.Equal(new ShortcutAction(ShortcutCommand.TogglePinWindow), _matcher.OnKey(VirtualKeys.P, isDown: true).Action);
     }
 
     private void Press(int key) => Assert.Equal(KeyDecision.PassThrough, _matcher.OnKey(key, isDown: true));

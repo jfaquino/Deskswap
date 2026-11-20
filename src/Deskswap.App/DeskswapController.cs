@@ -12,11 +12,36 @@ namespace Deskswap.App;
 /// </summary>
 internal sealed class DeskswapController : IDisposable
 {
+    /// <summary>Window events are coalesced for this long before the pool is reconciled.</summary>
+    private const int EventSettleMs = 40;
+
+    /// <summary>A window that switches desktops this often within <see cref="ActivationWindow"/> is ignored for a while.</summary>
+    private const int ActivationLimit = 2;
+
+    private static readonly TimeSpan ActivationWindow = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan ActivationCooldown = TimeSpan.FromMinutes(1);
+
+    /// <summary>The displays must look the same for this long before a change is applied.</summary>
+    private const int DisplaySettleMs = 750;
+
+    /// <summary>After a display change, windows Windows moves are put back instead of reassigned for this long.</summary>
+    private static readonly TimeSpan HoldAfterDisplayChange = TimeSpan.FromSeconds(3);
+
     private readonly HiddenWindowJournal _journal;
     private readonly ChangeApplier _applier;
     private readonly WindowInspector _inspector = new();
     private readonly LayoutStore _layoutStore = new(AppPaths.Layout);
     private readonly IndicatorPresenter _indicators = new();
+    private readonly WindowEventHook _windowEvents = new();
+    private readonly System.Windows.Forms.Timer _eventTimer = new() { Interval = EventSettleMs };
+    private readonly Dictionary<WindowId, List<DateTime>> _recentActivations = [];
+    private readonly Dictionary<WindowId, DateTime> _activationBlockedUntil = [];
+    private readonly System.Windows.Forms.Timer _settleTimer = new() { Interval = DisplaySettleMs };
+    private HashSet<long> _knownHandles = [];
+    private bool _displaysSettling;
+    private string _lastDisplaySignature = string.Empty;
+    private DateTime _holdUntil = DateTime.MinValue;
+    private bool _elevatedTipShown;
     private MonitorLayout _layout;
     private DesktopPool _pool;
 
@@ -26,6 +51,16 @@ internal sealed class DeskswapController : IDisposable
         _applier = new ChangeApplier(_journal);
         _layout = MonitorLayout.Capture();
         _pool = DesktopPool.Create(_layout.Ids);
+        _eventTimer.Tick += (_, _) =>
+        {
+            _eventTimer.Stop();
+            if (!IsPaused)
+            {
+                Guard(() => Reconcile(ReconcileMode.FollowActivation));
+            }
+        };
+        _windowEvents.WindowChanged += (_, e) => OnWindowEvent(e);
+        _settleTimer.Tick += (_, _) => OnSettleTick();
     }
 
     /// <summary>Raised with a message for the user (shown as a tray notification).</summary>
@@ -38,8 +73,8 @@ internal sealed class DeskswapController : IDisposable
     public bool IsPaused { get; private set; }
 
     /// <summary>
-    /// Starts up: shows windows a previous run left hidden, restores the saved layout, then re-applies it so windows
-    /// on hidden desktops are hidden again (design §8.3, §5.3).
+    /// Starts up: shows windows a previous run left hidden, restores the saved layout, re-applies it so windows on
+    /// hidden desktops are hidden again (design §8.3, §5.3), then starts listening to window events.
     /// </summary>
     public void Initialize()
     {
@@ -68,10 +103,15 @@ internal sealed class DeskswapController : IDisposable
         }
 
         Log.Info($"Started with {_layout.Monitors.Count} monitors and {_pool.DesktopCount} desktops.");
-        Guard(Reconcile);
+        Guard(() => Reconcile(ReconcileMode.Enforce));
+
+        if (!_windowEvents.Start())
+        {
+            Log.Info("Some window event hooks could not be installed; relying on the periodic sweep.");
+        }
     }
 
-    /// <summary>Runs a shortcut command on the monitor under the mouse cursor.</summary>
+    /// <summary>Runs a shortcut command on the monitor under the mouse cursor or on the focused window.</summary>
     /// <param name="action">The action from the keyboard hook.</param>
     public void Execute(ShortcutAction action)
     {
@@ -89,15 +129,15 @@ internal sealed class DeskswapController : IDisposable
             return;
         }
 
-        if (IsPaused)
+        if (IsPaused || _displaysSettling)
         {
-            return;
+            return; // While displays change, monitors and windows are in flux; acting now would be on stale state.
         }
 
         Guard(() =>
         {
-            // Adopt windows opened since the last sweep, so they belong to the desktop they were opened on.
-            Reconcile();
+            // Adopt windows opened since the last pass, so they belong to the desktop they were opened on.
+            Reconcile(ReconcileMode.FollowActivation);
 
             if (_layout.MonitorUnderCursor() is not { } monitor)
             {
@@ -112,6 +152,10 @@ internal sealed class DeskswapController : IDisposable
                 ShortcutCommand.GoToDesktop => _pool.GoTo(target, action.Argument),
                 ShortcutCommand.AddDesktop => _pool.AddDesktop(target),
                 ShortcutCommand.RemoveDesktop => _pool.RemoveDesktop(_pool.GetShownNumber(target), target),
+                ShortcutCommand.MoveWindowToPreviousDesktop => OnFocusedWindow(_pool.MoveWindowToPrevious),
+                ShortcutCommand.MoveWindowToNextDesktop => OnFocusedWindow(_pool.MoveWindowToNext),
+                ShortcutCommand.MoveWindowToDesktop => OnFocusedWindow(w => _pool.MoveWindowTo(w, action.Argument)),
+                ShortcutCommand.TogglePinWindow => TogglePinFocusedWindow(),
                 _ => PoolChanges.None,
             };
             Apply(changes);
@@ -123,7 +167,7 @@ internal sealed class DeskswapController : IDisposable
     {
         if (!IsPaused)
         {
-            Guard(Reconcile);
+            Guard(() => Reconcile(ReconcileMode.FollowActivation));
         }
     }
 
@@ -145,37 +189,10 @@ internal sealed class DeskswapController : IDisposable
     }
 
     /// <summary>
-    /// Reacts to monitors being connected, disconnected or rearranged. The pool is rebuilt from its own snapshot
-    /// for the new monitors; reconciling then hides or shows windows to match (design §4).
+    /// Reacts to monitors being connected, disconnected or rearranged (design §4): a disconnected monitor's desktop
+    /// stays in the pool with its windows hidden, and the monitor gets it back when reconnected.
     /// </summary>
-    public void OnDisplaysChanged()
-    {
-        Guard(() =>
-        {
-            MonitorLayout layout;
-            try
-            {
-                layout = MonitorLayout.Capture();
-            }
-            catch (InvalidOperationException)
-            {
-                return; // Mid-change with no monitors; the next notification will try again.
-            }
-
-            bool sameMonitors = layout.Ids.SequenceEqual(_layout.Ids);
-            _layout = layout;
-            if (!sameMonitors)
-            {
-                Log.Info($"Monitors changed: now {layout.Monitors.Count}.");
-                _pool = DesktopPool.Restore(_pool.ToSnapshot(), layout.Ids);
-            }
-
-            if (!IsPaused)
-            {
-                Reconcile();
-            }
-        });
-    }
+    public void OnDisplaysChanged() => BeginDisplaySettling();
 
     /// <summary>Shows every window and stops managing them until <see cref="Resume"/> (design §8.4).</summary>
     public void Pause()
@@ -204,23 +221,159 @@ internal sealed class DeskswapController : IDisposable
         IsPaused = false;
         Log.Info("Resumed.");
         PausedChanged?.Invoke(this, EventArgs.Empty);
-        Guard(Reconcile);
+        Guard(() => Reconcile(ReconcileMode.Enforce));
     }
 
     /// <summary>Saves the layout and shows every window. Call on exit.</summary>
     public void Shutdown()
     {
+        _windowEvents.Dispose();
+        _eventTimer.Stop();
+        _settleTimer.Stop();
         SaveLayout();
         int shown = _applier.ShowAll();
         Log.Info($"Exited; showed {shown} hidden windows.");
     }
 
-    public void Dispose() => _indicators.Dispose();
-
-    private void Reconcile()
+    public void Dispose()
     {
-        var observed = _inspector.Observe(_layout, _applier.HiddenWindows.ToList());
-        Apply(_pool.Reconcile(observed));
+        _windowEvents.Dispose();
+        _eventTimer.Dispose();
+        _settleTimer.Dispose();
+        _indicators.Dispose();
+    }
+
+    private void OnWindowEvent(WindowEvent e)
+    {
+        if (IsPaused)
+        {
+            return;
+        }
+
+        // Title changes are frequent (browser tabs, timers); they only matter for windows not managed yet.
+        if (e.Kind == WindowEventKind.Renamed && _knownHandles.Contains(e.Window))
+        {
+            return;
+        }
+
+        if (!_eventTimer.Enabled)
+        {
+            _eventTimer.Start();
+        }
+    }
+
+    /// <summary>Stops all window decisions until the displays look the same for <see cref="DisplaySettleMs"/>.</summary>
+    private void BeginDisplaySettling()
+    {
+        _lastDisplaySignature = MonitorLayout.ReadDisplaySignature();
+        if (!_displaysSettling)
+        {
+            _displaysSettling = true;
+            Log.Info("Displays are changing; waiting for them to settle.");
+        }
+
+        _settleTimer.Stop();
+        _settleTimer.Start();
+    }
+
+    private void OnSettleTick()
+    {
+        string signature = MonitorLayout.ReadDisplaySignature();
+        if (signature != _lastDisplaySignature)
+        {
+            _lastDisplaySignature = signature; // Still changing: wait another round.
+            return;
+        }
+
+        _settleTimer.Stop();
+        _displaysSettling = false;
+        Guard(() =>
+        {
+            if (!RefreshDisplays())
+            {
+                BeginDisplaySettling(); // No monitors yet; keep waiting.
+                return;
+            }
+
+            _holdUntil = DateTime.UtcNow + HoldAfterDisplayChange;
+            if (!IsPaused)
+            {
+                Reconcile(ReconcileMode.Hold);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Captures the displays again and, if the set of monitors changed, updates the pool: a disconnected monitor's
+    /// desktop is hidden and remembered, a reconnected one gets it back (design §4).
+    /// </summary>
+    /// <returns><see langword="true"/> if the layout was replaced.</returns>
+    private bool RefreshDisplays()
+    {
+        MonitorLayout layout;
+        try
+        {
+            layout = MonitorLayout.Capture();
+        }
+        catch (InvalidOperationException)
+        {
+            return false; // Mid-change with no monitors; the next notification will try again.
+        }
+
+        bool sameMonitors = layout.Ids.SequenceEqual(_layout.Ids);
+        _layout = layout;
+        if (!sameMonitors)
+        {
+            Log.Info($"Monitors changed: now {layout.Monitors.Count}.");
+            var changes = _pool.SetMonitors(layout.Ids);
+            if (!IsPaused)
+            {
+                Apply(changes);
+            }
+        }
+
+        return true;
+    }
+
+    private void Reconcile(ReconcileMode mode)
+    {
+        // Windows rearranges monitors in several steps and moves windows around on its own while it does. Acting on any
+        // intermediate state would put windows in the wrong place or reassign them, so wait until the displays settle.
+        if (_displaysSettling)
+        {
+            return;
+        }
+
+        if (!_layout.MatchesCurrentDisplays())
+        {
+            BeginDisplaySettling();
+            return;
+        }
+
+        // An incomplete observation would make the pool forget the missing windows, so never reconcile with one.
+        var observed = ObserveWindows();
+        if (_inspector.SawUnknownMonitor)
+        {
+            BeginDisplaySettling();
+            return;
+        }
+
+        // Shortly after a display change, windows on the "wrong" monitor were moved by Windows, not the user.
+        if (DateTime.UtcNow < _holdUntil)
+        {
+            mode = ReconcileMode.Hold;
+        }
+
+        WindowId? foreground = WindowInspector.TryGetId(WindowInspector.ForegroundWindow, out var id) ? id : null;
+        var changes = _pool.Reconcile(observed, mode, foreground, BlockedActivations());
+        if (changes.ActivatedBy is { } activated)
+        {
+            TrackActivation(activated);
+        }
+
+        Apply(changes);
+        _knownHandles = [.. observed.Select(w => w.Id.Handle)];
+        ShowElevatedTipOnce();
     }
 
     private void Apply(PoolChanges changes)
@@ -232,6 +385,67 @@ internal sealed class DeskswapController : IDisposable
 
         var indicators = _applier.Apply(changes, _layout);
         _indicators.Show(indicators, _layout);
+    }
+
+    private List<ObservedWindow> ObserveWindows() =>
+        [
+            .. _inspector.Observe(_layout, _applier.HiddenWindows.ToList())
+                .Select(w => w.IsVisible && _applier.IsHidePending(w.Id) ? w with { IsVisible = false } : w), // Our own hide, still in flight.
+        ];
+
+    private static PoolChanges OnFocusedWindow(Func<WindowId, PoolChanges> operation) =>
+        WindowInspector.TryGetId(WindowInspector.ForegroundWindow, out var window) ? operation(window) : PoolChanges.None;
+
+    private PoolChanges TogglePinFocusedWindow()
+    {
+        nint handle = WindowInspector.ForegroundWindow;
+        return WindowInspector.TryGetId(handle, out var window) && _layout.MonitorOf(handle) is { } monitor
+            ? _pool.TogglePin(window, monitor.Id)
+            : PoolChanges.None;
+    }
+
+    /// <summary>
+    /// Stops following a window that keeps showing itself right after being hidden, so two desktops can't
+    /// ping-pong. It is hidden normally instead, for a minute.
+    /// </summary>
+    private void TrackActivation(WindowId window)
+    {
+        var now = DateTime.UtcNow;
+        if (!_recentActivations.TryGetValue(window, out var times))
+        {
+            times = [];
+            _recentActivations[window] = times;
+        }
+
+        times.RemoveAll(t => now - t > ActivationWindow);
+        times.Add(now);
+        if (times.Count >= ActivationLimit)
+        {
+            _activationBlockedUntil[window] = now + ActivationCooldown;
+            times.Clear();
+            Log.Info($"Window {window.Handle:X} keeps showing itself; not following it for {ActivationCooldown.TotalSeconds:0} s.");
+        }
+    }
+
+    private HashSet<WindowId> BlockedActivations()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var expired in _activationBlockedUntil.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToList())
+        {
+            _activationBlockedUntil.Remove(expired);
+        }
+
+        return [.. _activationBlockedUntil.Keys];
+    }
+
+    private void ShowElevatedTipOnce()
+    {
+        if (!_elevatedTipShown && _inspector.ElevatedWindowsSkipped > 0)
+        {
+            _elevatedTipShown = true;
+            Log.Info($"{_inspector.ElevatedWindowsSkipped} windows belong to apps running as administrator; leaving them visible.");
+            Notify?.Invoke(this, Strings.NotifyElevated);
+        }
     }
 
     /// <summary>Runs an operation; on any failure, logs it, shows every window and pauses (design §8.6).</summary>

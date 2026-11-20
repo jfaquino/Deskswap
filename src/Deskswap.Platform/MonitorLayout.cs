@@ -87,6 +87,53 @@ public sealed class MonitorLayout
         return new MonitorLayout(unique);
     }
 
+    /// <summary>
+    /// Reads a cheap fingerprint of the connected displays: monitor handles with their bounds and work areas. Two
+    /// equal fingerprints a moment apart mean the displays have settled.
+    /// </summary>
+    /// <returns>The fingerprint.</returns>
+    public static string ReadDisplaySignature()
+    {
+        var parts = new List<string>();
+        unsafe
+        {
+            PInvoke.EnumDisplayMonitors(HDC.Null, (RECT?)null, (handle, _, _, _) =>
+            {
+                var info = new MONITORINFO { cbSize = (uint)sizeof(MONITORINFO) };
+                if (PInvoke.GetMonitorInfo(handle, &info))
+                {
+                    parts.Add(Describe(KeyOf(handle), ToScreenRect(info.rcMonitor), ToScreenRect(info.rcWork)));
+                }
+
+                return true;
+            }, default);
+        }
+
+        parts.Sort(StringComparer.Ordinal);
+        return string.Join('|', parts);
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layout still describes the connected displays. Cheap enough to call
+    /// before every pass, unlike <see cref="Capture"/>.
+    /// </summary>
+    /// <returns><see langword="false"/> if a monitor was connected, disconnected, moved or resized since the capture.</returns>
+    public bool MatchesCurrentDisplays() => ReadDisplaySignature() == Signature;
+
+    /// <summary>Gets the fingerprint of the displays this layout was captured from.</summary>
+    public string Signature
+    {
+        get
+        {
+            var parts = Monitors.Select(m => Describe(m.Handle, m.Bounds, m.WorkArea)).ToList();
+            parts.Sort(StringComparer.Ordinal);
+            return string.Join('|', parts);
+        }
+    }
+
+    private static string Describe(nint handle, ScreenRect bounds, ScreenRect workArea) =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{handle:X}:{bounds.Left},{bounds.Top},{bounds.Right},{bounds.Bottom}:{workArea.Left},{workArea.Top},{workArea.Right},{workArea.Bottom}");
+
     /// <summary>Gets a monitor by its stable id.</summary>
     /// <param name="id">The id.</param>
     /// <param name="monitor">The monitor, when the method returns <see langword="true"/>.</param>

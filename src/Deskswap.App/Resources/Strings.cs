@@ -37,6 +37,14 @@ internal static class Strings
 
     public static string NotifyLayoutReset => Get(nameof(NotifyLayoutReset));
 
+    public static string NotifyElevated => Get(nameof(NotifyElevated));
+
+    public static string IndicatorPinned => Get(nameof(IndicatorPinned));
+
+    public static string IndicatorUnpinned => Get(nameof(IndicatorUnpinned));
+
+    public static string IndicatorWindowMoved => Get(nameof(IndicatorWindowMoved));
+
     public static string DesktopNumber(int number) => Format(nameof(DesktopNumber), number);
 
     public static string IndicatorNotAvailable(int number) => Format(nameof(IndicatorNotAvailable), number);

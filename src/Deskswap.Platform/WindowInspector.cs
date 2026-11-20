@@ -26,6 +26,22 @@ public sealed class WindowInspector
 
     private readonly uint _ownProcessId = (uint)Environment.ProcessId;
 
+    /// <summary>Per process instance: whether it runs at a higher integrity level than Deskswap.</summary>
+    private readonly Dictionary<(int ProcessId, long StartTicks), bool> _elevated = [];
+
+    /// <summary>
+    /// Gets how many eligible windows the last <see cref="Observe"/> skipped because their app runs at a higher
+    /// integrity level (e.g. as administrator). Deskswap can't hide those, so they stay visible on every desktop
+    /// (design §6.4).
+    /// </summary>
+    public int ElevatedWindowsSkipped { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the last <see cref="Observe"/> found a window on a monitor the layout doesn't
+    /// know: the layout is stale and the observation must not be trusted (windows would look closed).
+    /// </summary>
+    public bool SawUnknownMonitor { get; private set; }
+
     /// <summary>Lists all top-level windows in z-order, top-most first.</summary>
     /// <returns>The window handles.</returns>
     public static IReadOnlyList<nint> EnumerateTopLevel()
@@ -46,6 +62,11 @@ public sealed class WindowInspector
     /// <param name="window">The window handle.</param>
     /// <returns><see langword="true"/> if the window has the visible style.</returns>
     public static bool IsVisible(nint window) => PInvoke.IsWindowVisible(new HWND(window));
+
+    /// <summary>Gets a value indicating whether a window's app has stopped responding.</summary>
+    /// <param name="window">The window handle.</param>
+    /// <returns><see langword="true"/> if Windows considers the window hung.</returns>
+    public static bool IsHung(nint window) => PInvoke.IsHungAppWindow(new HWND(window));
 
     /// <summary>Gets a value indicating whether a window is minimized.</summary>
     /// <param name="window">The window handle.</param>
@@ -141,11 +162,25 @@ public sealed class WindowInspector
         var startTimes = new Dictionary<uint, long>();
         var observed = new List<ObservedWindow>();
         var seen = new HashSet<WindowId>();
+        int elevated = 0;
+        SawUnknownMonitor = false;
 
         foreach (nint window in EnumerateTopLevel())
         {
-            if (!IsEligible(window) || !TryGetId(window, out var id, startTimes) || layout.MonitorOf(window) is not { } monitor)
+            if (!IsEligible(window) || !TryGetId(window, out var id, startTimes))
             {
+                continue;
+            }
+
+            if (layout.MonitorOf(window) is not { } monitor)
+            {
+                SawUnknownMonitor = true;
+                continue;
+            }
+
+            if (IsElevated(id))
+            {
+                elevated++;
                 continue;
             }
 
@@ -153,10 +188,18 @@ public sealed class WindowInspector
             seen.Add(id);
         }
 
+        ElevatedWindowsSkipped = elevated;
+
         foreach (var id in hiddenByDeskswap)
         {
-            if (seen.Contains(id) || !IsAlive(id, startTimes) || layout.MonitorOf((nint)id.Handle) is not { } monitor)
+            if (seen.Contains(id) || !IsAlive(id, startTimes))
             {
+                continue;
+            }
+
+            if (layout.MonitorOf((nint)id.Handle) is not { } monitor)
+            {
+                SawUnknownMonitor = true;
                 continue;
             }
 
@@ -164,6 +207,18 @@ public sealed class WindowInspector
         }
 
         return observed;
+    }
+
+    private bool IsElevated(WindowId id)
+    {
+        var key = (id.ProcessId, id.ProcessStartTicks);
+        if (!_elevated.TryGetValue(key, out bool elevated))
+        {
+            elevated = ProcessInfo.IsMoreTrustedThanUs((uint)id.ProcessId);
+            _elevated[key] = elevated;
+        }
+
+        return elevated;
     }
 
     private bool IsManageableIgnoringVisibility(nint window)

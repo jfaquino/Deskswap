@@ -18,6 +18,25 @@ public sealed class ChangeApplier(HiddenWindowJournal journal)
     private readonly Dictionary<WindowId, long> _stackRank = [];
     private long _nextRank;
 
+    /// <summary>When each window was last hidden, to tell Deskswap's own hide apart from an app showing itself.</summary>
+    private readonly Dictionary<WindowId, long> _hiddenAt = [];
+
+    /// <summary>How long a hide may take to land (hide requests are asynchronous).</summary>
+    private static readonly TimeSpan HideGracePeriod = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>
+    /// Gets a value indicating whether Deskswap asked to hide this window moments ago. Such a window may still look
+    /// visible because the hide is asynchronous; it must not be mistaken for a window asking for attention.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <returns>
+    /// <see langword="true"/> while the hide may still be in flight: shortly after it was requested, or for as long as
+    /// the window's app isn't responding (it will process the hide when it recovers).
+    /// </returns>
+    public bool IsHidePending(WindowId window) =>
+        _hiddenAt.TryGetValue(window, out long at)
+        && (System.Diagnostics.Stopwatch.GetElapsedTime(at) < HideGracePeriod || WindowInspector.IsHung((nint)window.Handle));
+
     /// <summary>Gets the windows Deskswap has hidden and not shown again.</summary>
     public IEnumerable<WindowId> HiddenWindows => _journal.Windows;
 
@@ -37,16 +56,27 @@ public sealed class ChangeApplier(HiddenWindowJournal journal)
 
             // Record the stack, then hide bottom-most first so only the last (top-most) hide moves activation.
             var bottomMostFirst = WindowOperations.TopMostFirst(changes.Hide).Reverse().ToList();
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
             foreach (var window in bottomMostFirst)
             {
                 _stackRank[window] = ++_nextRank;
+                _hiddenAt[window] = now;
                 WindowOperations.Hide(window);
             }
         }
 
         foreach (var relocation in changes.Relocations)
         {
-            if (layout.TryGet(relocation.From, out var from) && layout.TryGet(relocation.To, out var to))
+            if (!layout.TryGet(relocation.To, out var to))
+            {
+                continue;
+            }
+
+            // Unknown origin: move the window from wherever it actually is, and not at all if it's already there.
+            var from = relocation.From is { } known && layout.TryGet(known, out var origin)
+                ? origin
+                : layout.MonitorOf((nint)relocation.Window.Handle);
+            if (from is not null && from != to)
             {
                 WindowOperations.Relocate(relocation.Window, from, to, layout.Primary);
             }
@@ -82,18 +112,25 @@ public sealed class ChangeApplier(HiddenWindowJournal journal)
         int shown = WindowOperations.ShowStacked(InRecordedOrder(hidden));
         _journal.Clear();
         _stackRank.Clear();
+        _hiddenAt.Clear();
         return shown;
     }
 
-    /// <summary>Orders windows bottom-most first by recorded rank; windows without a rank go first (bottom).</summary>
+    /// <summary>
+    /// Orders windows bottom-most first by recorded rank. Hidden windows without a rank go to the bottom; windows that
+    /// are already visible (e.g. one just moved to this desktop) go to the top so they keep focus.
+    /// </summary>
     private List<WindowId> InRecordedOrder(IEnumerable<WindowId> windows) =>
-        [.. windows.OrderBy(w => _stackRank.GetValueOrDefault(w, 0))];
+        [.. windows.OrderBy(w => _stackRank.TryGetValue(w, out long rank) ? rank
+            : WindowInspector.IsVisible((nint)w.Handle) ? long.MaxValue
+            : 0)];
 
     private void ForgetRanks(IEnumerable<WindowId> windows)
     {
         foreach (var window in windows)
         {
             _stackRank.Remove(window);
+            _hiddenAt.Remove(window);
         }
     }
 

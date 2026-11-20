@@ -55,6 +55,9 @@ public static class VirtualKeys
     /// <summary>The letter D.</summary>
     public const int D = 0x44;
 
+    /// <summary>The letter P.</summary>
+    public const int P = 0x50;
+
     /// <summary>Left Windows key.</summary>
     public const int LeftWin = 0x5B;
 
@@ -132,6 +135,18 @@ public enum ShortcutCommand
 
     /// <summary>Show every hidden window and pause Deskswap; when paused, resume.</summary>
     TogglePause,
+
+    /// <summary>Move the focused window to the previous free desktop; its monitor follows.</summary>
+    MoveWindowToPreviousDesktop,
+
+    /// <summary>Move the focused window to the next free desktop; its monitor follows.</summary>
+    MoveWindowToNextDesktop,
+
+    /// <summary>Move the focused window to desktop N (the argument).</summary>
+    MoveWindowToDesktop,
+
+    /// <summary>Pin the focused window to every desktop of its monitor, or unpin it.</summary>
+    TogglePinWindow,
 }
 
 /// <summary>A command with its argument (the desktop number for <see cref="ShortcutCommand.GoToDesktop"/>).</summary>
@@ -161,7 +176,7 @@ public sealed class ShortcutMap
         _bindings = new ReadOnlyDictionary<KeyChord, ShortcutAction>(new Dictionary<KeyChord, ShortcutAction>(bindings));
     }
 
-    /// <summary>Gets the default bindings for M1 (design §6.1).</summary>
+    /// <summary>Gets the default bindings (design §6.1).</summary>
     public static ShortcutMap Defaults { get; } = CreateDefaults();
 
     /// <summary>Gets all bindings.</summary>
@@ -189,11 +204,15 @@ public sealed class ShortcutMap
             [new(winCtrl, VirtualKeys.D)] = new(ShortcutCommand.AddDesktop),
             [new(winCtrl, VirtualKeys.F4)] = new(ShortcutCommand.RemoveDesktop),
             [new(winCtrl | KeyModifiers.Shift, VirtualKeys.F12)] = new(ShortcutCommand.TogglePause),
+            [new(winCtrl | KeyModifiers.Shift, VirtualKeys.Left)] = new(ShortcutCommand.MoveWindowToPreviousDesktop),
+            [new(winCtrl | KeyModifiers.Shift, VirtualKeys.Right)] = new(ShortcutCommand.MoveWindowToNextDesktop),
+            [new(winCtrl | KeyModifiers.Shift, VirtualKeys.P)] = new(ShortcutCommand.TogglePinWindow),
         };
 
         for (int n = 1; n <= 9; n++)
         {
             bindings[new(winCtrl, VirtualKeys.Digit(n))] = new(ShortcutCommand.GoToDesktop, n);
+            bindings[new(winCtrl | KeyModifiers.Shift, VirtualKeys.Digit(n))] = new(ShortcutCommand.MoveWindowToDesktop, n);
         }
 
         return new ShortcutMap(bindings);

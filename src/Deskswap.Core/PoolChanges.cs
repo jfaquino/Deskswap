@@ -23,6 +23,34 @@ public enum IndicatorKind
 
     /// <summary>The action is not allowed; see <see cref="NotAllowedReason"/>.</summary>
     NotAllowed,
+
+    /// <summary>A window was pinned to every desktop of its monitor.</summary>
+    Pinned,
+
+    /// <summary>A window was unpinned and now belongs to the desktop shown on its monitor.</summary>
+    Unpinned,
+
+    /// <summary>A window was moved to the desktop this monitor shows.</summary>
+    WindowMoved,
+}
+
+/// <summary>How <see cref="DesktopPool.Reconcile"/> treats a window that is visible although its desktop is hidden.</summary>
+public enum ReconcileMode
+{
+    /// <summary>Hide it: the pool is right. Used at startup, on resume and after display changes.</summary>
+    Enforce,
+
+    /// <summary>
+    /// Treat it as asking for attention and switch its monitor to its desktop (design §5.4). Used while running.
+    /// </summary>
+    FollowActivation,
+
+    /// <summary>
+    /// Like <see cref="Enforce"/>, and also move a window that is on another monitor than its desktop back to that
+    /// desktop's monitor instead of reassigning it. Used right after a display change, while Windows may still be
+    /// moving windows around on its own (design §4).
+    /// </summary>
+    Hold,
 }
 
 /// <summary>Why an action was not allowed.</summary>
@@ -48,9 +76,12 @@ public sealed record Indicator(MonitorId Monitor, int Number, string? Name, Indi
 
 /// <summary>A window that must move from one monitor to another, keeping its relative position and state.</summary>
 /// <param name="Window">The window to move.</param>
-/// <param name="From">The monitor the window is on now.</param>
+/// <param name="From">
+/// The monitor the window is on now, or <see langword="null"/> when unknown (for example its monitor was
+/// disconnected): the platform then moves it from wherever it actually is, and not at all if it is already there.
+/// </param>
 /// <param name="To">The monitor the window must move to.</param>
-public sealed record WindowRelocation(WindowId Window, MonitorId From, MonitorId To);
+public sealed record WindowRelocation(WindowId Window, MonitorId? From, MonitorId To);
 
 /// <summary>
 /// A request to focus the desktop now shown on a monitor: its top-most window, which (with the stacking order kept)
@@ -68,12 +99,14 @@ public sealed record FocusRequest(MonitorId Monitor);
 /// <param name="Show">Windows to show.</param>
 /// <param name="Focus">Where to put focus afterwards, if anywhere.</param>
 /// <param name="Indicators">Indicators to display.</param>
+/// <param name="ActivatedBy">The window whose showing itself switched a monitor to its desktop (design §5.4), if any.</param>
 public sealed record PoolChanges(
     IReadOnlyList<WindowId> Hide,
     IReadOnlyList<WindowRelocation> Relocations,
     IReadOnlyList<WindowId> Show,
     FocusRequest? Focus,
-    IReadOnlyList<Indicator> Indicators)
+    IReadOnlyList<Indicator> Indicators,
+    WindowId? ActivatedBy = null)
 {
     /// <summary>Gets an instance that changes nothing.</summary>
     public static PoolChanges None { get; } = new([], [], [], null, []);
@@ -90,6 +123,7 @@ internal sealed class ChangeBuilder
     private readonly List<WindowRelocation> _relocations = [];
     private readonly List<Indicator> _indicators = [];
     private FocusRequest? _focus;
+    private WindowId? _activatedBy;
 
     public void Hide(WindowId window)
     {
@@ -109,10 +143,11 @@ internal sealed class ChangeBuilder
         }
     }
 
-    public void Relocate(WindowId window, MonitorId from, MonitorId to)
+    public void Relocate(WindowId window, MonitorId? from, MonitorId to)
     {
         if (from != to)
         {
+            _relocations.RemoveAll(r => r.Window == window);
             _relocations.Add(new WindowRelocation(window, from, to));
         }
     }
@@ -121,8 +156,10 @@ internal sealed class ChangeBuilder
 
     public void Indicate(Indicator indicator) => _indicators.Add(indicator);
 
+    public void ActivatedBy(WindowId window) => _activatedBy = window;
+
     public PoolChanges Build() =>
         _hide.Count == 0 && _show.Count == 0 && _relocations.Count == 0 && _focus is null && _indicators.Count == 0
             ? PoolChanges.None
-            : new PoolChanges([.. _hide], [.. _relocations], [.. _show], _focus, [.. _indicators]);
+            : new PoolChanges([.. _hide], [.. _relocations], [.. _show], _focus, [.. _indicators], _activatedBy);
 }

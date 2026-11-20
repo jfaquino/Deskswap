@@ -21,4 +21,8 @@
   <data name="NotifyError" xml:space="preserve"><value>Something went wrong, so Deskswap showed all windows and paused. Details are in the log.</value></data>
   <data name="NotifyHookFailed" xml:space="preserve"><value>Deskswap couldn't take over its keyboard shortcuts. Details are in the log.</value></data>
   <data name="NotifyLayoutReset" xml:space="preserve"><value>The saved desktop layout was damaged, so Deskswap started fresh. A backup was kept.</value></data>
+  <data name="NotifyElevated" xml:space="preserve"><value>Some windows belong to apps running as administrator. Windows doesn't let Deskswap hide them, so they stay visible on every desktop.</value></data>
+  <data name="IndicatorPinned" xml:space="preserve"><value>Window pinned to every desktop</value></data>
+  <data name="IndicatorUnpinned" xml:space="preserve"><value>Window unpinned</value></data>
+  <data name="IndicatorWindowMoved" xml:space="preserve"><value>Window moved here</value></data>
 </root>

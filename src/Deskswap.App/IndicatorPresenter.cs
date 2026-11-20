@@ -52,6 +52,9 @@ internal sealed class IndicatorPresenter : IDisposable
             IndicatorKind.Removed => (desktop, Strings.IndicatorRemoved),
             IndicatorKind.EdgeReached => (desktop, Strings.IndicatorEdge),
             IndicatorKind.NotAvailable => (Strings.IndicatorNotAvailable(indicator.Number), null),
+            IndicatorKind.Pinned => (desktop, Strings.IndicatorPinned),
+            IndicatorKind.Unpinned => (desktop, Strings.IndicatorUnpinned),
+            IndicatorKind.WindowMoved => (desktop, Strings.IndicatorWindowMoved),
             IndicatorKind.NotAllowed when indicator.Reason == NotAllowedReason.MaximumDesktopsReached =>
                 (desktop, Strings.IndicatorMaximumReached(DesktopPool.MaxDesktops)),
             IndicatorKind.NotAllowed => (desktop, Strings.IndicatorMinimumReached),

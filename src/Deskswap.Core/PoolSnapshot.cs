@@ -2,12 +2,17 @@ namespace Deskswap.Core;
 
 /// <summary>A serializable copy of the pool, used to restore it after Deskswap restarts.</summary>
 /// <param name="Desktops">The desktops, in order (index 0 is desktop 1).</param>
-/// <param name="Monitors">Which desktop each monitor showed.</param>
+/// <param name="Monitors">
+/// Which desktop each monitor showed: connected monitors first, then disconnected monitors Deskswap remembers so
+/// they get their desktop back when reconnected (design §4).
+/// </param>
 /// <param name="Windows">Which desktop each window belonged to.</param>
+/// <param name="Pinned">Windows pinned to every desktop of their monitor; <see langword="null"/> in older files.</param>
 public sealed record PoolSnapshot(
     IReadOnlyList<DesktopSnapshot> Desktops,
     IReadOnlyList<MonitorAssignment> Monitors,
-    IReadOnlyList<WindowAssignment> Windows);
+    IReadOnlyList<WindowAssignment> Windows,
+    IReadOnlyList<WindowId>? Pinned = null);
 
 /// <summary>A desktop in a <see cref="PoolSnapshot"/>.</summary>
 /// <param name="Id">The desktop's id.</param>

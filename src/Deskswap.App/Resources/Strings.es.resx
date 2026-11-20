@@ -21,4 +21,8 @@
   <data name="NotifyError" xml:space="preserve"><value>Algo salió mal, así que Deskswap mostró todas las ventanas y se pausó. Los detalles están en el registro.</value></data>
   <data name="NotifyHookFailed" xml:space="preserve"><value>Deskswap no pudo tomar el control de sus atajos de teclado. Los detalles están en el registro.</value></data>
   <data name="NotifyLayoutReset" xml:space="preserve"><value>La distribución de escritorios guardada estaba dañada, así que Deskswap empezó de cero. Se guardó una copia de seguridad.</value></data>
+  <data name="NotifyElevated" xml:space="preserve"><value>Algunas ventanas pertenecen a aplicaciones que se ejecutan como administrador. Windows no permite que Deskswap las oculte, así que se quedan visibles en todos los escritorios.</value></data>
+  <data name="IndicatorPinned" xml:space="preserve"><value>Ventana fijada en todos los escritorios</value></data>
+  <data name="IndicatorUnpinned" xml:space="preserve"><value>Ventana desfijada</value></data>
+  <data name="IndicatorWindowMoved" xml:space="preserve"><value>Ventana movida aquí</value></data>
 </root>

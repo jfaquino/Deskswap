@@ -14,8 +14,8 @@ namespace Deskswap.App;
 /// </summary>
 internal sealed class TrayApplicationContext : ApplicationContext
 {
-    /// <summary>The safety-net sweep interval. M2 replaces most of this with window events (design §12).</summary>
-    private const int ReconcileIntervalMs = 1000;
+    /// <summary>The safety-net sweep interval; window events do the real-time work (design §12).</summary>
+    private const int ReconcileIntervalMs = 5000;
 
     /// <summary>The layout is saved at most this often, and only when it changed (design §10).</summary>
     private const int SaveIntervalMs = 2000;
@@ -29,7 +29,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly KeyboardHook _keyboardHook;
     private readonly System.Windows.Forms.Timer _reconcileTimer = new() { Interval = ReconcileIntervalMs };
     private readonly System.Windows.Forms.Timer _saveTimer = new() { Interval = SaveIntervalMs };
-    private readonly System.Windows.Forms.Timer _displayChangeTimer = new() { Interval = 500 };
     private Process? _watchdog;
 
     public TrayApplicationContext()
@@ -75,11 +74,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _reconcileTimer.Tick += (_, _) => _controller.Tick();
         _saveTimer.Tick += (_, _) => _controller.SaveLayout();
-        _displayChangeTimer.Tick += (_, _) =>
-        {
-            _displayChangeTimer.Stop();
-            _controller.OnDisplaysChanged();
-        };
         _reconcileTimer.Start();
         _saveTimer.Start();
 
@@ -102,7 +96,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         SystemEvents.SessionSwitch -= OnSessionSwitch;
         _reconcileTimer.Stop();
         _saveTimer.Stop();
-        _displayChangeTimer.Stop();
         _keyboardHook.Dispose();
         _controller.Shutdown();
         _controller.Dispose();
@@ -114,7 +107,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _icon.Dispose();
         _reconcileTimer.Dispose();
         _saveTimer.Dispose();
-        _displayChangeTimer.Dispose();
         _dispatcher.Dispose();
         base.ExitThreadCore();
     }
@@ -149,13 +141,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _trayIcon.Text = Truncate(paused ? Strings.AppTooltipPaused : Strings.AppTooltip);
     }
 
+    // The controller waits for the displays to settle before acting (design §4).
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
-        _dispatcher.BeginInvoke(() =>
-        {
-            // Displays often change in several steps; act once things settle.
-            _displayChangeTimer.Stop();
-            _displayChangeTimer.Start();
-        });
+        _dispatcher.BeginInvoke(_controller.OnDisplaysChanged);
 
     private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
     {

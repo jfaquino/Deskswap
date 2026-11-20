@@ -83,8 +83,8 @@ the new monitor:
 
 ### 3.6 Pinning
 
-- **Pin window**: from the tray, the overview, or a shortcut (assigned later). The window stays visible
-  on every desktop **of its monitor**, and stays on that monitor.
+- **Pin window**: `Win+Ctrl+Shift+P` toggles the focused window (later also from the overview). The window
+  stays visible on every desktop **of its monitor**, and stays on that monitor. Pins are saved in the layout.
 - **Pin app**: a rule (§5.2) that pins every window of an app.
 - Unpinning a window assigns it to the desktop currently shown on its monitor.
 
@@ -93,9 +93,18 @@ the new monitor:
 - **Identity:** use a stable id from the Windows Display Configuration APIs (device interface path and
   EDID manufacturer/product/serial). `\\.\DISPLAYn` names change after docking or reboot.
 - **Order** for "monitor k": left to right by position, then top to bottom.
-- **Disconnect:** before Windows moves its windows, Deskswap hides the windows of the desktop that
-  monitor was showing. The desktop **stays in the pool**, with the window's position on that monitor
-  remembered. Any monitor can show it later (windows travel, §3.5).
+- **Disconnect:** Deskswap hides the windows of the desktop that monitor was showing. The desktop
+  **stays in the pool** and Deskswap remembers which monitor showed it. Windows moves the windows of a
+  disconnected monitor elsewhere, so their position is treated as unknown: when the desktop is shown again,
+  its windows are moved from wherever they actually are (§3.5).
+- **Wait for displays to settle, then hold:** Windows changes the display arrangement in several steps
+  (a reconnected monitor first appears with a temporary arrangement) and moves windows on its own while it
+  does, both on disconnect and, with "remember window locations", on reconnect. Before every pass Deskswap
+  compares a cheap display fingerprint (monitor handles, bounds, work areas) with its layout. If they differ,
+  or a window is on an unknown monitor, it **stops all window decisions and ignores shortcuts** until the
+  fingerprint has been stable for 0.75 s; it never reconciles with an incomplete view (missing windows would
+  look closed). Then it applies the change and, for **3 s**, holds the layout: a window found on another
+  monitor than its desktop's is moved back instead of being treated as dragged by the user.
 - **Reconnect:** the monitor shows the desktop it showed before, if no other monitor is showing it.
   Otherwise it shows the lowest-numbered desktop not shown anywhere. If there is none, a desktop is
   added (invariant 3).
@@ -141,8 +150,17 @@ When a window on a hidden desktop asks for attention, its monitor **switches to 
 window comes to the front. Examples: an app shows its own hidden window, you click its notification,
 or you relaunch an app that brings its existing window forward.
 
-Detected as: an eligible window Deskswap hid becomes visible, or becomes the foreground window, without
-Deskswap having shown it. The switch uses the same rules as **Go to N**, including swap.
+Detected as: an eligible window of a hidden desktop is visible without Deskswap having shown it. Window
+events (show, foreground, title change, …) trigger a check within about 40 ms. The monitor the window is on
+switches to its desktop; the rest of that desktop is brought from wherever it is.
+
+- **Deskswap's own hides don't count.** Hiding is asynchronous, so a window Deskswap hid less than 1.5 s ago
+  is treated as hidden even if it still looks visible.
+- **Several at once:** the foreground window wins; windows of other hidden desktops are hidden again.
+- **Enforce, don't follow, when the layout is being re-applied:** at startup, on resume and after a display
+  change, visible windows of hidden desktops are hidden instead.
+- **No ping-pong:** a window that triggers two switches within 10 s (an app that keeps showing itself right
+  after being hidden) is not followed for a minute; it is hidden instead, and the log says so.
 
 ## 6. Shortcuts, input and feedback
 
@@ -156,7 +174,8 @@ low-level keyboard hook.
 | `Win+Ctrl+←` / `Win+Ctrl+→` | Previous / next desktop on the target monitor (§3.3) |
 | `Win+Ctrl+1…9` | Go to desktop N (swap if shown elsewhere) |
 | `Win+Ctrl+Shift+←` / `Win+Ctrl+Shift+→` | Move the focused window to the previous / next desktop, following it |
-| `Win+Ctrl+Shift+1…9` | Move the focused window to desktop N |
+| `Win+Ctrl+Shift+1…9` | Move the focused window to desktop N (if another monitor shows N, the window moves to that monitor). Replaces Windows' "open taskbar app N as administrator". |
+| `Win+Ctrl+Shift+P` | Pin the focused window to every desktop of its monitor, or unpin it |
 | `Win+Ctrl+D` | Add a desktop and switch the target monitor to it |
 | `Win+Ctrl+F4` | Remove the desktop shown on the target monitor |
 | `Win+Tab` | Toggle the Deskswap overview on every monitor |
@@ -191,9 +210,11 @@ thumbnails where possible.
 
 ### 6.4 Elevated (administrator) windows
 
-Deskswap runs as a normal user, so it can't hide windows of elevated apps. They are treated as
-**pinned** (always visible), and a one-time tray tip explains why. No option to run Deskswap
-elevated for now.
+Deskswap runs as a normal user, so Windows won't let it hide windows of apps running at a higher
+integrity level (as administrator, or system processes). Such windows are detected by comparing the
+process's integrity level with Deskswap's (a process whose level can't be read counts as higher) and are
+left **unmanaged**: always visible, never moved. A one-time tray tip per session explains why. No option to
+run Deskswap elevated for now.
 
 ## 7. Window eligibility
 
@@ -281,6 +302,8 @@ Each item needs a Core unit test, or a manual smoke-test step for Platform behav
 - [ ] Minimized and maximized windows survive switches, swaps and travel.
 - [ ] Owned dialogs and modal windows follow their owner.
 - [ ] Elevated windows stay visible, with a one-time tip.
+- [ ] An app that re-shows itself right after being hidden doesn't make two desktops ping-pong.
+- [ ] Moving the focused window to the next desktop keeps it focused and on top.
 - [ ] Cloaked, UWP and Store apps; apps whose window class changes; windows with an empty title.
 - [ ] Full-screen apps and games. Don't break exclusive full screen.
 - [ ] Deskswap killed with windows hidden. The watchdog restores them; so does a restart.
@@ -294,7 +317,7 @@ Each item needs a Core unit test, or a manual smoke-test step for Platform behav
 | # | Scope | You can… |
 |---|---|---|
 | **M1** | Pool model with go to / next / previous / swap / add / remove; show/hide per monitor; eligibility; journal, watchdog and startup recovery; keyboard hook with default shortcuts; indicator; tray menu (Show all windows, Pause, Exit); restore pool and monitor mapping after a Deskswap restart; English and Spanish resources | Replace your current app for daily use |
-| **M2** | Event-driven new-window placement; activation switches desktop; move-window shortcuts; pinning; elevated windows treated as pinned; monitor connect/disconnect; windows travel with their desktop | Work without ever placing windows by hand |
+| **M2** | Event-driven new-window placement; activation switches desktop; move-window shortcuts; pinning; elevated windows left unmanaged; monitor connect/disconnect; windows travel with their desktop | Work without ever placing windows by hand |
 | **M3** | Rules; auto-remember and restore after reboot; settings window with shortcut editor; start with Windows; desktop names | Reboot and find everything where it was |
 | **M4** | Overview (`Win+Tab`) with previews and drag and drop, add/remove/reorder; slide animation | Manage desktops visually |
 | **M5** | Per-desktop wallpaper (per monitor, documented `IDesktopWallpaper`); installer, code signing, auto-update | Share it with others |
