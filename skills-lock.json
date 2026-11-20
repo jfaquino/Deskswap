@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "csharp-async": {
+      "source": "github/awesome-copilot",
+      "sourceType": "autoskills-registry",
+      "computedHash": "213d4b0921836fdf1ea3d218bc3625f48d149463f9bc765aac0eb343f31cfe37"
+    },
+    "csharp-docs": {
+      "source": "github/awesome-copilot",
+      "sourceType": "autoskills-registry",
+      "computedHash": "03ba5f2f605625202803d1cc79353e10b4f3ff720b93992aeecc8d88a1e44720"
+    },
+    "csharp-xunit": {
+      "source": "github/awesome-copilot",
+      "sourceType": "autoskills-registry",
+      "computedHash": "808c2d86afd16bccaba5f6d499361eb1da4d3e687a3305aa376ad4d40382e27d"
+    }
+  }
+}
