@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Deskswap.App/Deskswap.App.csproj" />
+    <Project Path="src/Deskswap.Core/Deskswap.Core.csproj" />
+    <Project Path="src/Deskswap.Platform/Deskswap.Platform.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Deskswap.Core.Tests/Deskswap.Core.Tests.csproj" />
+  </Folder>
+</Solution>

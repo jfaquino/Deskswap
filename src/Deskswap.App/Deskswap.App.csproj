@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tray app: icon and menu, overview, settings UI, startup registration. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyName>Deskswap</AssemblyName>
+    <RootNamespace>Deskswap.App</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Deskswap.Core\Deskswap.Core.csproj" />
+    <ProjectReference Include="..\Deskswap.Platform\Deskswap.Platform.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure domain logic: desktops, monitors, window assignments, rules, layout.
+       No Win32 or UI references, so everything here is unit-testable. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Deskswap.Core.Tests" />
+  </ItemGroup>
+
+</Project>

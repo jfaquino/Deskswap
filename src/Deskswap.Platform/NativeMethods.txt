@@ -1,0 +1,4 @@
+// Win32 APIs that CsWin32 generates bindings for (one name per line).
+// Add entries here instead of writing [DllImport] declarations by hand.
+GetForegroundWindow
+IsWindow
