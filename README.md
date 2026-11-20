@@ -2,6 +2,7 @@
 
 **Swap desktops between your monitors.**
 
+[![CI](https://github.com/jfaquino/Deskswap/actions/workflows/ci.yml/badge.svg)](https://github.com/jfaquino/Deskswap/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform: Windows 11](https://img.shields.io/badge/platform-Windows%2011-0078D4)
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
