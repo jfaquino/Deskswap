@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WPF user interface: the overview (M3). Kept apart from the WinForms tray app so WPF and WinForms types
+       never clash. WinForms is referenced only for keyboard interop with the tray app's message loop. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Deskswap.Core\Deskswap.Core.csproj" />
+    <ProjectReference Include="..\Deskswap.Platform\Deskswap.Platform.csproj" />
+  </ItemGroup>
+
+</Project>

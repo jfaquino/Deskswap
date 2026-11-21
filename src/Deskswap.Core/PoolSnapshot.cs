@@ -36,7 +36,8 @@ public sealed record WindowAssignment(WindowId Window, DesktopId Desktop);
 /// <param name="Name">The desktop's name, if any.</param>
 /// <param name="ShownOn">The monitor showing the desktop, or <see langword="null"/> if it is hidden.</param>
 /// <param name="Windows">The windows on the desktop.</param>
-public sealed record DesktopInfo(DesktopId Id, int Number, string? Name, MonitorId? ShownOn, IReadOnlyCollection<WindowId> Windows);
+/// <param name="LastMonitor">The monitor that showed it most recently, if any (its windows are there).</param>
+public sealed record DesktopInfo(DesktopId Id, int Number, string? Name, MonitorId? ShownOn, IReadOnlyCollection<WindowId> Windows, MonitorId? LastMonitor = null);
 
 /// <summary>A window as the platform currently sees it, used by <see cref="DesktopPool.Reconcile"/>.</summary>
 /// <param name="Id">The window.</param>

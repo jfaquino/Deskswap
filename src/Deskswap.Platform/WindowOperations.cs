@@ -23,6 +23,12 @@ public static class WindowOperations
     public static bool Show(WindowId window) =>
         PInvoke.ShowWindowAsync(new HWND((nint)window.Handle), SHOW_WINDOW_CMD.SW_SHOWNA);
 
+    /// <summary>Restores a minimized window.</summary>
+    /// <param name="window">The window handle.</param>
+    /// <returns><see langword="true"/> if the request was posted.</returns>
+    public static bool Restore(nint window) =>
+        PInvoke.ShowWindowAsync(new HWND(window), SHOW_WINDOW_CMD.SW_RESTORE);
+
     /// <summary>Sorts windows by their current place in the z-order, top-most first.</summary>
     /// <param name="windows">The windows.</param>
     /// <returns>The windows, top-most first; windows that no longer exist come last.</returns>

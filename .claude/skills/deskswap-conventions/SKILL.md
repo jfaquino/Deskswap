@@ -32,7 +32,8 @@ or changing behavior, and update it in the same change when a decision changes. 
 |---|---|---|
 | `Deskswap.Core` (`net10.0`) | BCL only | Win32, WinForms, `System.Drawing`, file/registry I/O, timers, static mutable state |
 | `Deskswap.Platform` (`net10.0-windows`) | Core | UI, desktop-model decisions |
-| `Deskswap.App` (`net10.0-windows`, WinForms) | Core, Platform | Desktop/window logic that belongs in Core |
+| `Deskswap.Ui` (`net10.0-windows`, WPF) | Core, Platform | Desktop-model decisions; it shows an `OverviewState` and reports user intent through `IOverviewActions` |
+| `Deskswap.App` (`net10.0-windows`, WinForms) | Core, Platform, Ui | Desktop/window logic that belongs in Core |
 
 - Core owns the model (desktops, monitors, window assignments, pins, rules, layout snapshots) and
   declares the interfaces it needs (window system, clock, storage). Platform implements them; App
@@ -82,7 +83,7 @@ A window left hidden after a crash is the worst bug this app can have.
 - Event-driven first: WinEvent hooks (`EVENT_OBJECT_SHOW`, `EVENT_OBJECT_HIDE`, `EVENT_OBJECT_DESTROY`,
   `EVENT_SYSTEM_FOREGROUND`, `EVENT_OBJECT_LOCATIONCHANGE`, …) drive updates. A slow reconciliation
   sweep (seconds, not milliseconds) is only a safety net.
-- Don't write to disk when nothing changed. Don't capture window thumbnails unless the overview is open.
+- Don't write to disk when nothing changed. Take window pictures only when the overview opens, when a desktop is hidden, and (unless the user chose app icons for minimized windows) of the window in use every few seconds when something changed; card-sized, in memory only, never on disk. Never while Deskswap's own windows are on screen.
 - Avoid per-window process lookups in hot paths. Cache process info by `(pid, start time)`.
 
 ## Persistence

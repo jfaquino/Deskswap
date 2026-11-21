@@ -26,6 +26,15 @@ public readonly record struct ScreenRect(int Left, int Top, int Right, int Botto
     /// <param name="dy">The vertical offset.</param>
     /// <returns>The moved rectangle.</returns>
     public ScreenRect Offset(int dx, int dy) => new(Left + dx, Top + dy, Right + dx, Bottom + dy);
+
+    /// <summary>Returns the part of this rectangle inside another one.</summary>
+    /// <param name="other">The other rectangle.</param>
+    /// <returns>The overlap, or <see langword="null"/> if they don't overlap.</returns>
+    public ScreenRect? Intersect(ScreenRect other)
+    {
+        var overlap = new ScreenRect(Math.Max(Left, other.Left), Math.Max(Top, other.Top), Math.Min(Right, other.Right), Math.Min(Bottom, other.Bottom));
+        return overlap.Width > 0 && overlap.Height > 0 ? overlap : null;
+    }
 }
 
 /// <summary>Geometry used when windows travel with their desktop between monitors (design §3.5).</summary>

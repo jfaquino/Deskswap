@@ -116,8 +116,8 @@ stores stays in `%LOCALAPPDATA%\Deskswap\`:
 |---|---|---|
 | **M1** | Shared desktop pool with swap, per-monitor shortcuts, crash-safe hiding, indicator, tray menu, English and Spanish | ✅ Done |
 | **M2** | Instant placement of new windows, switch to a window's desktop when it asks for attention, move-window shortcuts, pin windows to all desktops, monitor connect/disconnect | ✅ Done |
-| **M3** | App rules, layout restored after reboot, settings window with shortcut editor, start with Windows, desktop names | Next |
-| **M4** | `Win+Tab` overview with previews, drag and drop, add/remove/reorder desktops, slide animation | Planned |
+| **M3** | `Win+Tab` overview with live previews, drag and drop, add/remove/rename/reorder desktops, Windows 11 Fluent look, slide animation | In progress |
+| **M4** | App rules, layout restored after reboot, settings window with shortcut editor, start with Windows | Planned |
 | **M5** | Per-desktop wallpaper, installer, signed releases | Planned |
 
 The full behavior specification is in [docs/design.md](docs/design.md).
@@ -128,7 +128,8 @@ The full behavior specification is in [docs/design.md](docs/design.md).
 |---|---|---|
 | `src/Deskswap.Core` | `net10.0` | Pure domain logic: desktop pool, shortcuts, geometry. No Win32. |
 | `src/Deskswap.Platform` | `net10.0-windows` | Win32 integration via [CsWin32](https://github.com/microsoft/CsWin32): monitors, windows, journal, keyboard hook. |
-| `src/Deskswap.App` | `net10.0-windows` | WinForms tray app. Builds `Deskswap.exe`. |
+| `src/Deskswap.Ui` | `net10.0-windows` | WPF user interface: the `Win+Tab` overview. |
+| `src/Deskswap.App` | `net10.0-windows` | WinForms tray app and composition root. Builds `Deskswap.exe`. |
 | `tests/Deskswap.Core.Tests` | `net10.0` | Unit tests for the domain model (xUnit v3). |
 | `tests/Deskswap.Platform.Tests` | `net10.0-windows` | Journal and monitor tests. |
 

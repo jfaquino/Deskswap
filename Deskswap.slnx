@@ -3,6 +3,7 @@
     <Project Path="src/Deskswap.App/Deskswap.App.csproj" />
     <Project Path="src/Deskswap.Core/Deskswap.Core.csproj" />
     <Project Path="src/Deskswap.Platform/Deskswap.Platform.csproj" />
+    <Project Path="src/Deskswap.Ui/Deskswap.Ui.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Deskswap.Core.Tests/Deskswap.Core.Tests.csproj" />

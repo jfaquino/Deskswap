@@ -25,6 +25,9 @@ public enum WindowEventKind
     /// <summary>The window was restored from minimized.</summary>
     MinimizeEnded,
 
+    /// <summary>The window was minimized.</summary>
+    MinimizeStarted,
+
     /// <summary>The window's title changed (it may only now become eligible).</summary>
     Renamed,
 
@@ -74,7 +77,7 @@ public sealed class WindowEventHook : IDisposable
         {
             (PInvoke.EVENT_SYSTEM_FOREGROUND, PInvoke.EVENT_SYSTEM_FOREGROUND),
             (PInvoke.EVENT_SYSTEM_MOVESIZEEND, PInvoke.EVENT_SYSTEM_MOVESIZEEND),
-            (PInvoke.EVENT_SYSTEM_MINIMIZEEND, PInvoke.EVENT_SYSTEM_MINIMIZEEND),
+            (PInvoke.EVENT_SYSTEM_MINIMIZESTART, PInvoke.EVENT_SYSTEM_MINIMIZEEND),
             (PInvoke.EVENT_OBJECT_DESTROY, PInvoke.EVENT_OBJECT_HIDE),
             (PInvoke.EVENT_OBJECT_NAMECHANGE, PInvoke.EVENT_OBJECT_NAMECHANGE),
             (PInvoke.EVENT_OBJECT_CLOAKED, PInvoke.EVENT_OBJECT_UNCLOAKED),
@@ -113,6 +116,7 @@ public sealed class WindowEventHook : IDisposable
         PInvoke.EVENT_SYSTEM_FOREGROUND => WindowEventKind.Foreground,
         PInvoke.EVENT_SYSTEM_MOVESIZEEND => WindowEventKind.MoveSizeEnded,
         PInvoke.EVENT_SYSTEM_MINIMIZEEND => WindowEventKind.MinimizeEnded,
+        PInvoke.EVENT_SYSTEM_MINIMIZESTART => WindowEventKind.MinimizeStarted,
         PInvoke.EVENT_OBJECT_NAMECHANGE => WindowEventKind.Renamed,
         PInvoke.EVENT_OBJECT_CLOAKED => WindowEventKind.Cloaked,
         PInvoke.EVENT_OBJECT_UNCLOAKED => WindowEventKind.Uncloaked,

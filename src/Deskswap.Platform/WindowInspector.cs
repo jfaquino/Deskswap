@@ -2,6 +2,7 @@ using Deskswap.Core;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Dwm;
+using Windows.Win32.Graphics.Gdi;
 using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace Deskswap.Platform;
@@ -209,7 +210,14 @@ public sealed class WindowInspector
         return observed;
     }
 
-    private bool IsElevated(WindowId id)
+    /// <summary>
+    /// Gets a value indicating whether a window's app runs at a higher integrity level than Deskswap (e.g. as
+    /// administrator, like Task Manager). Windows keeps Deskswap from hiding its windows, and keeps the keys typed
+    /// into them from Deskswap's keyboard hook, so shortcuts don't work while one is in front (design §6.4).
+    /// </summary>
+    /// <param name="id">The window.</param>
+    /// <returns><see langword="true"/> if it is out of Deskswap's reach.</returns>
+    public bool IsElevated(WindowId id)
     {
         var key = (id.ProcessId, id.ProcessStartTicks);
         if (!_elevated.TryGetValue(key, out bool elevated))
@@ -247,6 +255,126 @@ public sealed class WindowInspector
         }
 
         return !ShellClasses.Contains(GetClassName(window));
+    }
+
+    /// <summary>Gets a window's visible frame and its full rectangle (which includes invisible resize borders).</summary>
+    /// <param name="window">The window handle.</param>
+    /// <param name="frame">The visible frame, in screen pixels.</param>
+    /// <param name="outer">The window rectangle, in screen pixels.</param>
+    /// <returns><see langword="true"/> if the window exists.</returns>
+    public static unsafe bool TryGetFrame(nint window, out ScreenRect frame, out ScreenRect outer)
+    {
+        var hwnd = new HWND(window);
+        frame = outer = default;
+        if (!PInvoke.GetWindowRect(hwnd, out var rect))
+        {
+            return false;
+        }
+
+        outer = MonitorLayout.ToScreenRect(rect);
+        RECT visible;
+        frame = PInvoke.DwmGetWindowAttribute(hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &visible, (uint)sizeof(RECT)).Succeeded
+            ? MonitorLayout.ToScreenRect(visible)
+            : outer;
+        return true;
+    }
+
+    /// <summary>Gets the size a window has when not minimized or maximized.</summary>
+    /// <param name="window">The window handle.</param>
+    /// <param name="width">The width, in pixels.</param>
+    /// <param name="height">The height, in pixels.</param>
+    /// <returns><see langword="true"/> if the window exists.</returns>
+    public static bool TryGetRestoredSize(nint window, out int width, out int height)
+    {
+        var placement = new WINDOWPLACEMENT { length = (uint)System.Runtime.InteropServices.Marshal.SizeOf<WINDOWPLACEMENT>() };
+        bool ok = PInvoke.GetWindowPlacement(new HWND(window), ref placement);
+        width = ok ? placement.rcNormalPosition.right - placement.rcNormalPosition.left : 0;
+        height = ok ? placement.rcNormalPosition.bottom - placement.rcNormalPosition.top : 0;
+        return ok;
+    }
+
+    /// <summary>
+    /// Gets where a window is, for laying it out in the overview: its visible frame, or for a minimized window the
+    /// place it returns to when restored (its monitor's work area if it was maximized).
+    /// </summary>
+    /// <param name="window">The window handle.</param>
+    /// <param name="primary">The primary monitor (placement uses coordinates relative to its work area).</param>
+    /// <param name="bounds">The bounds, in screen pixels.</param>
+    /// <returns><see langword="true"/> if the window exists.</returns>
+    public static bool TryGetLayoutBounds(nint window, DisplayMonitor primary, out ScreenRect bounds)
+    {
+        ArgumentNullException.ThrowIfNull(primary);
+        bounds = default;
+        var hwnd = new HWND(window);
+        if (PInvoke.IsIconic(hwnd))
+        {
+            var placement = new WINDOWPLACEMENT { length = (uint)System.Runtime.InteropServices.Marshal.SizeOf<WINDOWPLACEMENT>() };
+            if (!PInvoke.GetWindowPlacement(hwnd, ref placement))
+            {
+                return false;
+            }
+
+            // Maximized before it was minimized: it comes back maximized, not at its normal size.
+            if (placement.flags.HasFlag(WINDOWPLACEMENT_FLAGS.WPF_RESTORETOMAXIMIZED) && TryGetWorkAreaOf(hwnd, out bounds))
+            {
+                return true;
+            }
+
+            bounds = MonitorLayout.ToScreenRect(placement.rcNormalPosition)
+                .Offset(primary.WorkArea.Left - primary.Bounds.Left, primary.WorkArea.Top - primary.Bounds.Top);
+            return true;
+        }
+
+        return TryGetFrame(window, out bounds, out _);
+    }
+
+    /// <summary>Gets the work area of a window's monitor (for a minimized window, the one it was on).</summary>
+    private static unsafe bool TryGetWorkAreaOf(HWND window, out ScreenRect workArea)
+    {
+        var monitor = PInvoke.MonitorFromWindow(window, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
+        var info = new MONITORINFO { cbSize = (uint)sizeof(MONITORINFO) };
+        if (!PInvoke.GetMonitorInfo(monitor, &info))
+        {
+            workArea = default;
+            return false;
+        }
+
+        workArea = MonitorLayout.ToScreenRect(info.rcWork);
+        return true;
+    }
+
+    /// <summary>Gets the executable file of the app a window belongs to.</summary>
+    /// <param name="window">The window.</param>
+    /// <returns>The full path, or <see langword="null"/> if the process can't be queried.</returns>
+    public static string? GetAppPath(WindowId window) => ProcessInfo.TryGetImagePath((uint)window.ProcessId);
+
+    /// <summary>Gets a window's large icon without waiting on an app that isn't responding.</summary>
+    /// <param name="window">The window handle.</param>
+    /// <returns>The icon handle (owned by the window; don't destroy it), or 0.</returns>
+    public static unsafe nint GetIcon(nint window)
+    {
+        const uint IconBig = 1;
+        const uint IconSmall2 = 2;
+        var hwnd = new HWND(window);
+        foreach (uint kind in (ReadOnlySpan<uint>)[IconBig, IconSmall2])
+        {
+            nuint result = 0;
+            var sent = PInvoke.SendMessageTimeout(
+                hwnd,
+                PInvoke.WM_GETICON,
+                new WPARAM(kind),
+                new LPARAM(0),
+                SEND_MESSAGE_TIMEOUT_FLAGS.SMTO_ABORTIFHUNG | SEND_MESSAGE_TIMEOUT_FLAGS.SMTO_BLOCK,
+                50,
+                &result);
+            if (sent != 0 && result != 0)
+            {
+                return (nint)result;
+            }
+        }
+
+        // Icon handles fit in 32 bits, so the 32-bit getter is enough on 64-bit Windows.
+        return (nint)(int)PInvoke.GetClassLong(hwnd, GET_CLASS_LONG_INDEX.GCL_HICON);
     }
 
     private static unsafe bool IsCloaked(HWND hwnd)
