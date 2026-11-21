@@ -8,6 +8,16 @@ using Windows.Win32.System.Threading;
 
 namespace Deskswap.Platform;
 
+/// <summary>Whether Deskswap itself runs as administrator.</summary>
+public static class Elevation
+{
+    /// <summary>
+    /// Gets a value indicating whether Deskswap runs at high integrity (as administrator). It then receives keys
+    /// typed into other administrator apps and can manage their windows (design §6.4).
+    /// </summary>
+    public static bool IsElevated => ProcessInfo.CurrentIntegrityLevel >= 0x3000;
+}
+
 /// <summary>Reads process details needed for window identity (start time) and, later, rules (image path).</summary>
 internal static class ProcessInfo
 {

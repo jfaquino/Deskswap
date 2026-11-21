@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using Deskswap.App.Resources;
 using Deskswap.Core;
 using Deskswap.Core.Input;
@@ -43,6 +44,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_showAllItem);
         menu.Items.Add(_resumeItem);
         menu.Items.Add(new ToolStripSeparator());
+        if (!Elevation.IsElevated)
+        {
+            menu.Items.Add(Strings.MenuRestartAsAdministrator, null, (_, _) => RestartAsAdministrator());
+        }
+
         menu.Items.Add(Strings.MenuExit, null, (_, _) => ExitThread());
 
         _icon = TrayIconArt.Create();
@@ -57,7 +63,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _controller = new DeskswapController();
         _controller.Notify += (_, message) => _trayIcon.ShowBalloonTip(5000, ProductInfo.Name, message, ToolTipIcon.Info);
         _controller.PausedChanged += (_, _) => OnPausedChanged();
+        _controller.OverviewOpenChanged += (_, _) => UpdateShortcutMap();
         _controller.Initialize();
+        _trayIcon.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                _controller.ToggleOverview();
+            }
+        };
+
+        // The overview's windows are created after startup settles, so the first Win+Tab is quick.
+        _dispatcher.BeginInvoke(_controller.PrewarmOverview);
 
         _keyboardHook = new KeyboardHook(ShortcutMap.Defaults, action => _dispatcher.BeginInvoke(() => _controller.Execute(action)));
         try
@@ -111,6 +128,43 @@ internal sealed class TrayApplicationContext : ApplicationContext
         base.ExitThreadCore();
     }
 
+    /// <summary>
+    /// Starts Deskswap again as administrator (Windows asks first) and exits this instance, so shortcuts also work
+    /// over administrator apps and their windows can be managed (design §6.4).
+    /// </summary>
+    private const int ErrorCancelled = 1223;
+
+    private void RestartAsAdministrator()
+    {
+        if (Environment.ProcessPath is not { } executable)
+        {
+            return;
+        }
+
+        try
+        {
+            using var restarted = Process.Start(new ProcessStartInfo(
+                executable,
+                $"{Program.RestartSwitch} {Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}")
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+            });
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
+        {
+            return; // The user said no to Windows' prompt; keep running as is.
+        }
+        catch (Win32Exception ex)
+        {
+            Log.Error("Could not restart as administrator.", ex);
+            return;
+        }
+
+        Log.Info("Restarting as administrator.");
+        ExitThread();
+    }
+
     private static string Truncate(string text) => text.Length <= 63 ? text : text[..62] + "…";
 
     private void StartWatchdog()
@@ -135,11 +189,19 @@ internal sealed class TrayApplicationContext : ApplicationContext
         bool paused = _controller.IsPaused;
 
         // While paused, only the pause toggle stays active so it can resume; every other key passes through.
-        _keyboardHook.SetMap(paused ? ShortcutMap.Defaults.Only(ShortcutCommand.TogglePause) : ShortcutMap.Defaults);
+        UpdateShortcutMap();
         _showAllItem.Visible = !paused;
         _resumeItem.Visible = paused;
         _trayIcon.Text = Truncate(paused ? Strings.AppTooltipPaused : Strings.AppTooltip);
     }
+
+    /// <summary>
+    /// While paused, only the pause toggle stays active so it can resume; while the overview is open, Esc closes it.
+    /// </summary>
+    private void UpdateShortcutMap() => _keyboardHook.SetMap(
+        _controller.IsPaused ? ShortcutMap.Defaults.Only(ShortcutCommand.TogglePause)
+        : _controller.IsOverviewOpen ? ShortcutMap.Defaults.WhileOverviewOpen()
+        : ShortcutMap.Defaults);
 
     // The controller waits for the displays to settle before acting (design §4).
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>

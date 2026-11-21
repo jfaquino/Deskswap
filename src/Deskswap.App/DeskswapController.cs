@@ -10,7 +10,7 @@ namespace Deskswap.App;
 /// resulting changes to real windows, keeps the pool in sync with what's on screen, and fails safe by showing all
 /// windows whenever something goes wrong (design §8). Use from the UI thread only.
 /// </summary>
-internal sealed class DeskswapController : IDisposable
+internal sealed partial class DeskswapController : IDisposable
 {
     /// <summary>Window events are coalesced for this long before the pool is reconciled.</summary>
     private const int EventSettleMs = 40;
@@ -39,9 +39,16 @@ internal sealed class DeskswapController : IDisposable
     private readonly System.Windows.Forms.Timer _settleTimer = new() { Interval = DisplaySettleMs };
     private HashSet<long> _knownHandles = [];
     private bool _displaysSettling;
+
+    /// <summary>A window was minimized, restored or resized while the overview is open; its tile must follow.</summary>
+    private bool _overviewStale;
     private string _lastDisplaySignature = string.Empty;
     private DateTime _holdUntil = DateTime.MinValue;
     private bool _elevatedTipShown;
+    private bool _elevatedForegroundTipShown;
+
+    /// <summary>How long the message about administrator apps stays on screen: it has two sentences to read.</summary>
+    private const int ElevatedNoticeMs = 7000;
     private MonitorLayout _layout;
     private DesktopPool _pool;
 
@@ -61,6 +68,7 @@ internal sealed class DeskswapController : IDisposable
         };
         _windowEvents.WindowChanged += (_, e) => OnWindowEvent(e);
         _settleTimer.Tick += (_, _) => OnSettleTick();
+        _pictureTimer.Tick += (_, _) => Guard(TakeActiveWindowPicture);
     }
 
     /// <summary>Raised with a message for the user (shown as a tray notification).</summary>
@@ -103,6 +111,7 @@ internal sealed class DeskswapController : IDisposable
         }
 
         Log.Info($"Started with {_layout.Monitors.Count} monitors and {_pool.DesktopCount} desktops.");
+        RememberShownDesktops();
         Guard(() => Reconcile(ReconcileMode.Enforce));
 
         if (!_windowEvents.Start())
@@ -126,6 +135,24 @@ internal sealed class DeskswapController : IDisposable
                 Pause();
             }
 
+            return;
+        }
+
+        if (action.Command == ShortcutCommand.ToggleOverview)
+        {
+            ToggleOverview();
+            return;
+        }
+
+        if (action.Command == ShortcutCommand.ToggleAppWindows)
+        {
+            ToggleAppWindows();
+            return;
+        }
+
+        if (action.Command == ShortcutCommand.CloseOverview)
+        {
+            Guard(() => _overview?.HandleEscape());
             return;
         }
 
@@ -202,6 +229,7 @@ internal sealed class DeskswapController : IDisposable
             return;
         }
 
+        CloseOverviewNow();
         SaveLayout();
         int shown = _applier.ShowAll();
         IsPaused = true;
@@ -222,14 +250,18 @@ internal sealed class DeskswapController : IDisposable
         Log.Info("Resumed.");
         PausedChanged?.Invoke(this, EventArgs.Empty);
         Guard(() => Reconcile(ReconcileMode.Enforce));
+        UpdatePictureTimer();
     }
 
     /// <summary>Saves the layout and shows every window. Call on exit.</summary>
     public void Shutdown()
     {
+        _overview?.Dispose();
+        _overview = null;
         _windowEvents.Dispose();
         _eventTimer.Stop();
         _settleTimer.Stop();
+        _pictureTimer.Stop();
         SaveLayout();
         int shown = _applier.ShowAll();
         Log.Info($"Exited; showed {shown} hidden windows.");
@@ -240,7 +272,10 @@ internal sealed class DeskswapController : IDisposable
         _windowEvents.Dispose();
         _eventTimer.Dispose();
         _settleTimer.Dispose();
+        _trimTimer.Dispose();
+        _pictureTimer.Dispose();
         _indicators.Dispose();
+        _overview?.Dispose();
     }
 
     private void OnWindowEvent(WindowEvent e)
@@ -256,6 +291,17 @@ internal sealed class DeskswapController : IDisposable
             return;
         }
 
+        if (e.Kind == WindowEventKind.Foreground)
+        {
+            ShowElevatedForegroundTipOnce(e.Window);
+        }
+
+        // The overview shows each window's state and shape; its tiles follow these.
+        if (IsOverviewOpen && e.Kind is WindowEventKind.MinimizeStarted or WindowEventKind.MinimizeEnded or WindowEventKind.MoveSizeEnded)
+        {
+            _overviewStale = true;
+        }
+
         if (!_eventTimer.Enabled)
         {
             _eventTimer.Start();
@@ -266,6 +312,7 @@ internal sealed class DeskswapController : IDisposable
     private void BeginDisplaySettling()
     {
         _lastDisplaySignature = MonitorLayout.ReadDisplaySignature();
+        CloseOverviewNow(); // Its windows and images belong to the old layout.
         if (!_displaysSettling)
         {
             _displaysSettling = true;
@@ -330,6 +377,8 @@ internal sealed class DeskswapController : IDisposable
             {
                 Apply(changes);
             }
+
+            RememberShownDesktops();
         }
 
         return true;
@@ -372,7 +421,16 @@ internal sealed class DeskswapController : IDisposable
         }
 
         Apply(changes);
-        _knownHandles = [.. observed.Select(w => w.Id.Handle)];
+        var handles = observed.Select(w => w.Id.Handle).ToHashSet();
+        if (IsOverviewOpen && changes == PoolChanges.None && (_overviewStale || !handles.SetEquals(_knownHandles)))
+        {
+            RefreshOverview(); // A window opened, closed, was minimized, restored or resized while the overview is up.
+        }
+
+        _overviewStale = false;
+
+        _knownHandles = handles;
+        ShowElevatedForegroundTipOnce(WindowInspector.ForegroundWindow);
         ShowElevatedTipOnce();
     }
 
@@ -383,8 +441,13 @@ internal sealed class DeskswapController : IDisposable
             return;
         }
 
+        CaptureOutgoingDesktops(changes);
         var indicators = _applier.Apply(changes, _layout);
-        _indicators.Show(indicators, _layout);
+        RememberShownDesktops();
+
+        // In the overview the result is visible already; only say why something didn't happen.
+        _indicators.Show(IsOverviewOpen ? indicators.Where(i => i.Kind is IndicatorKind.NotAllowed or IndicatorKind.NotAvailable) : indicators, _layout);
+        RefreshOverview();
     }
 
     private List<ObservedWindow> ObserveWindows() =>
@@ -438,6 +501,29 @@ internal sealed class DeskswapController : IDisposable
         return [.. _activationBlockedUntil.Keys];
     }
 
+    /// <summary>
+    /// The first time an app running as administrator comes to the front, says on screen why shortcuts stop working
+    /// (Windows doesn't pass the keys typed into it to Deskswap) and how to change that (design §6.4). Once per run;
+    /// on screen rather than as a notification, which Windows may silence.
+    /// </summary>
+    private void ShowElevatedForegroundTipOnce(nint window)
+    {
+        if (_elevatedForegroundTipShown || IsOverviewOpen || !WindowInspector.TryGetId(window, out var id) || !_inspector.IsElevated(id))
+        {
+            return;
+        }
+
+        _elevatedForegroundTipShown = true;
+        _elevatedTipShown = true; // This message says what that one does too.
+        string app = WindowInspector.GetTitle(window);
+        Log.Info($"An app running as administrator is in front ({WindowInspector.GetClassName(window)}); Windows doesn't pass its keys to Deskswap's shortcuts.");
+        _indicators.ShowNotice(
+            _layout.MonitorOf(window) ?? _layout.Primary,
+            Strings.ElevatedInFrontTitle(string.IsNullOrWhiteSpace(app) ? Strings.ElevatedAppFallback : app),
+            Strings.ElevatedInFrontDetail,
+            ElevatedNoticeMs);
+    }
+
     private void ShowElevatedTipOnce()
     {
         if (!_elevatedTipShown && _inspector.ElevatedWindowsSkipped > 0)
@@ -459,25 +545,31 @@ internal sealed class DeskswapController : IDisposable
         catch (Exception ex)
 #pragma warning restore CA1031
         {
-            Log.Error("Operation failed; showing all windows and pausing.", ex);
-            try
-            {
-                _applier.ShowAll();
-            }
-#pragma warning disable CA1031 // Last resort: the watchdog and the next start will recover from the journal.
-            catch (Exception showAllError)
-#pragma warning restore CA1031
-            {
-                Log.Error("Showing all windows failed too.", showAllError);
-            }
-
-            if (!IsPaused)
-            {
-                IsPaused = true;
-                PausedChanged?.Invoke(this, EventArgs.Empty);
-            }
-
-            Notify?.Invoke(this, Strings.NotifyError);
+            FailSafe(ex);
         }
+    }
+
+    /// <summary>Logs a failure, shows every window and pauses (design §8.6).</summary>
+    private void FailSafe(Exception ex)
+    {
+        Log.Error("Operation failed; showing all windows and pausing.", ex);
+        try
+        {
+            _applier.ShowAll();
+        }
+#pragma warning disable CA1031 // Last resort: the watchdog and the next start will recover from the journal.
+        catch (Exception showAllError)
+#pragma warning restore CA1031
+        {
+            Log.Error("Showing all windows failed too.", showAllError);
+        }
+
+        if (!IsPaused)
+        {
+            IsPaused = true;
+            PausedChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        Notify?.Invoke(this, Strings.NotifyError);
     }
 }

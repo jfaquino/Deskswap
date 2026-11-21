@@ -158,7 +158,7 @@ public sealed partial class DesktopPool
     /// <summary>Gets a read-only view of every desktop, in order.</summary>
     /// <returns>The desktops; index 0 is desktop 1.</returns>
     public IReadOnlyList<DesktopInfo> GetDesktops() =>
-        [.. _desktops.Select((d, index) => new DesktopInfo(d.Id, index + 1, d.Name, d.ShownOn, [.. d.Windows]))];
+        [.. _desktops.Select((d, index) => new DesktopInfo(d.Id, index + 1, d.Name, d.ShownOn, [.. d.Windows], d.LastMonitor))];
 
     /// <summary>Gets the desktop a monitor shows.</summary>
     /// <param name="monitor">A connected monitor.</param>

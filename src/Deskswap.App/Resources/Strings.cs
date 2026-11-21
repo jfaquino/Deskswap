@@ -39,6 +39,14 @@ internal static class Strings
 
     public static string NotifyElevated => Get(nameof(NotifyElevated));
 
+    public static string ElevatedInFrontDetail => Get(nameof(ElevatedInFrontDetail));
+
+    public static string ElevatedAppFallback => Get(nameof(ElevatedAppFallback));
+
+    public static string MenuRestartAsAdministrator => Get(nameof(MenuRestartAsAdministrator));
+
+    public static string ElevatedInFrontTitle(string app) => Format(nameof(ElevatedInFrontTitle), app);
+
     public static string IndicatorPinned => Get(nameof(IndicatorPinned));
 
     public static string IndicatorUnpinned => Get(nameof(IndicatorUnpinned));
@@ -52,6 +60,37 @@ internal static class Strings
     public static string IndicatorMaximumReached(int maximum) => Format(nameof(IndicatorMaximumReached), maximum);
 
     public static string NotifyRecovered(int count) => Format(nameof(NotifyRecovered), count);
+
+    public static string OverviewNoWindows => Get(nameof(OverviewNoWindows));
+
+    public static string OverviewNewDesktop => Get(nameof(OverviewNewDesktop));
+
+    public static string OverviewRename => Get(nameof(OverviewRename));
+
+    public static string OverviewRemove => Get(nameof(OverviewRemove));
+
+    public static string OverviewCannotRemove => Get(nameof(OverviewCannotRemove));
+
+    public static string OverviewMoveTo => Get(nameof(OverviewMoveTo));
+
+    public static string OverviewPin => Get(nameof(OverviewPin));
+
+    public static string OverviewUnpin => Get(nameof(OverviewUnpin));
+
+    public static string MonitorLeft => Get(nameof(MonitorLeft));
+
+    public static string MonitorRight => Get(nameof(MonitorRight));
+
+    public static string MonitorCenter => Get(nameof(MonitorCenter));
+
+    /// <summary>Gets the format string "Shown on {0}" (the overview fills in the monitor).</summary>
+    public static string OverviewShownOn => Get(nameof(OverviewShownOn));
+
+    public static string AppWindowsThisMonitor => Get(nameof(AppWindowsThisMonitor));
+
+    public static string ShownOnMonitor(string monitor) => Format(nameof(OverviewShownOn), monitor);
+
+    public static string MonitorNumber(int number) => Format(nameof(MonitorNumber), number);
 
     private static string Get(string name) => Manager.GetString(name, CultureInfo.CurrentUICulture) ?? name;
 

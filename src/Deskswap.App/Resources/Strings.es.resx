@@ -22,7 +22,26 @@
   <data name="NotifyHookFailed" xml:space="preserve"><value>Deskswap no pudo tomar el control de sus atajos de teclado. Los detalles están en el registro.</value></data>
   <data name="NotifyLayoutReset" xml:space="preserve"><value>La distribución de escritorios guardada estaba dañada, así que Deskswap empezó de cero. Se guardó una copia de seguridad.</value></data>
   <data name="NotifyElevated" xml:space="preserve"><value>Algunas ventanas pertenecen a aplicaciones que se ejecutan como administrador. Windows no permite que Deskswap las oculte, así que se quedan visibles en todos los escritorios.</value></data>
+  <data name="ElevatedInFrontTitle" xml:space="preserve"><value>Los atajos no funcionan sobre {0}</value></data>
+  <data name="ElevatedInFrontDetail" xml:space="preserve"><value>Se ejecuta como administrador, y Windows no deja que otras aplicaciones vean sus teclas.
+Para usar los atajos aquí, elige «Reiniciar como administrador» en el menú de Deskswap en la bandeja.</value></data>
+  <data name="ElevatedAppFallback" xml:space="preserve"><value>esta aplicación</value></data>
+  <data name="MenuRestartAsAdministrator" xml:space="preserve"><value>Reiniciar como administrador</value></data>
   <data name="IndicatorPinned" xml:space="preserve"><value>Ventana fijada en todos los escritorios</value></data>
   <data name="IndicatorUnpinned" xml:space="preserve"><value>Ventana desfijada</value></data>
   <data name="IndicatorWindowMoved" xml:space="preserve"><value>Ventana movida aquí</value></data>
+  <data name="OverviewNoWindows" xml:space="preserve"><value>No hay ventanas en este escritorio</value></data>
+  <data name="OverviewNewDesktop" xml:space="preserve"><value>Nuevo escritorio</value></data>
+  <data name="OverviewRename" xml:space="preserve"><value>Cambiar nombre</value></data>
+  <data name="OverviewRemove" xml:space="preserve"><value>Eliminar</value></data>
+  <data name="OverviewCannotRemove" xml:space="preserve"><value>Cada monitor necesita un escritorio, así que este no se puede eliminar</value></data>
+  <data name="OverviewMoveTo" xml:space="preserve"><value>Mover a</value></data>
+  <data name="OverviewPin" xml:space="preserve"><value>Anclar a todos los escritorios</value></data>
+  <data name="OverviewUnpin" xml:space="preserve"><value>Desanclar</value></data>
+  <data name="OverviewShownOn" xml:space="preserve"><value>Se muestra en {0}</value></data>
+  <data name="MonitorLeft" xml:space="preserve"><value>Izquierda</value></data>
+  <data name="MonitorRight" xml:space="preserve"><value>Derecha</value></data>
+  <data name="MonitorCenter" xml:space="preserve"><value>Centro</value></data>
+  <data name="MonitorNumber" xml:space="preserve"><value>Monitor {0}</value></data>
+  <data name="AppWindowsThisMonitor" xml:space="preserve"><value>En este monitor</value></data>
 </root>
