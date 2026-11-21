@@ -21,4 +21,27 @@
   <data name="NotifyError" xml:space="preserve"><value>Something went wrong, so Deskswap showed all windows and paused. Details are in the log.</value></data>
   <data name="NotifyHookFailed" xml:space="preserve"><value>Deskswap couldn't take over its keyboard shortcuts. Details are in the log.</value></data>
   <data name="NotifyLayoutReset" xml:space="preserve"><value>The saved desktop layout was damaged, so Deskswap started fresh. A backup was kept.</value></data>
+  <data name="NotifyElevated" xml:space="preserve"><value>Some windows belong to apps running as administrator. Windows doesn't let Deskswap hide them, so they stay visible on every desktop.</value></data>
+  <data name="ElevatedInFrontTitle" xml:space="preserve"><value>Shortcuts don't work over {0}</value></data>
+  <data name="ElevatedInFrontDetail" xml:space="preserve"><value>It runs as administrator, and Windows keeps its keys from other apps.
+To use shortcuts here, choose "Restart as administrator" in Deskswap's tray menu.</value></data>
+  <data name="ElevatedAppFallback" xml:space="preserve"><value>this app</value></data>
+  <data name="MenuRestartAsAdministrator" xml:space="preserve"><value>Restart as administrator</value></data>
+  <data name="IndicatorPinned" xml:space="preserve"><value>Window pinned to every desktop</value></data>
+  <data name="IndicatorUnpinned" xml:space="preserve"><value>Window unpinned</value></data>
+  <data name="IndicatorWindowMoved" xml:space="preserve"><value>Window moved here</value></data>
+  <data name="OverviewNoWindows" xml:space="preserve"><value>No windows on this desktop</value></data>
+  <data name="OverviewNewDesktop" xml:space="preserve"><value>New desktop</value></data>
+  <data name="OverviewRename" xml:space="preserve"><value>Rename</value></data>
+  <data name="OverviewRemove" xml:space="preserve"><value>Remove</value></data>
+  <data name="OverviewCannotRemove" xml:space="preserve"><value>Each monitor needs a desktop, so this one can't be removed</value></data>
+  <data name="OverviewMoveTo" xml:space="preserve"><value>Move to</value></data>
+  <data name="OverviewPin" xml:space="preserve"><value>Pin to all desktops</value></data>
+  <data name="OverviewUnpin" xml:space="preserve"><value>Unpin</value></data>
+  <data name="OverviewShownOn" xml:space="preserve"><value>Shown on {0}</value></data>
+  <data name="MonitorLeft" xml:space="preserve"><value>Left</value></data>
+  <data name="MonitorRight" xml:space="preserve"><value>Right</value></data>
+  <data name="MonitorCenter" xml:space="preserve"><value>Center</value></data>
+  <data name="MonitorNumber" xml:space="preserve"><value>Monitor {0}</value></data>
+  <data name="AppWindowsThisMonitor" xml:space="preserve"><value>On this monitor</value></data>
 </root>

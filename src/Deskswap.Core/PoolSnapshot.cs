@@ -2,12 +2,17 @@ namespace Deskswap.Core;
 
 /// <summary>A serializable copy of the pool, used to restore it after Deskswap restarts.</summary>
 /// <param name="Desktops">The desktops, in order (index 0 is desktop 1).</param>
-/// <param name="Monitors">Which desktop each monitor showed.</param>
+/// <param name="Monitors">
+/// Which desktop each monitor showed: connected monitors first, then disconnected monitors Deskswap remembers so
+/// they get their desktop back when reconnected (design §4).
+/// </param>
 /// <param name="Windows">Which desktop each window belonged to.</param>
+/// <param name="Pinned">Windows pinned to every desktop of their monitor; <see langword="null"/> in older files.</param>
 public sealed record PoolSnapshot(
     IReadOnlyList<DesktopSnapshot> Desktops,
     IReadOnlyList<MonitorAssignment> Monitors,
-    IReadOnlyList<WindowAssignment> Windows);
+    IReadOnlyList<WindowAssignment> Windows,
+    IReadOnlyList<WindowId>? Pinned = null);
 
 /// <summary>A desktop in a <see cref="PoolSnapshot"/>.</summary>
 /// <param name="Id">The desktop's id.</param>
@@ -31,7 +36,8 @@ public sealed record WindowAssignment(WindowId Window, DesktopId Desktop);
 /// <param name="Name">The desktop's name, if any.</param>
 /// <param name="ShownOn">The monitor showing the desktop, or <see langword="null"/> if it is hidden.</param>
 /// <param name="Windows">The windows on the desktop.</param>
-public sealed record DesktopInfo(DesktopId Id, int Number, string? Name, MonitorId? ShownOn, IReadOnlyCollection<WindowId> Windows);
+/// <param name="LastMonitor">The monitor that showed it most recently, if any (its windows are there).</param>
+public sealed record DesktopInfo(DesktopId Id, int Number, string? Name, MonitorId? ShownOn, IReadOnlyCollection<WindowId> Windows, MonitorId? LastMonitor = null);
 
 /// <summary>A window as the platform currently sees it, used by <see cref="DesktopPool.Reconcile"/>.</summary>
 /// <param name="Id">The window.</param>

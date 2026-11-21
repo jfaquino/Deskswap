@@ -28,6 +28,9 @@ public static class VirtualKeys
     /// <summary>Tab.</summary>
     public const int Tab = 0x09;
 
+    /// <summary>Esc.</summary>
+    public const int Escape = 0x1B;
+
     /// <summary>Shift (either side).</summary>
     public const int Shift = 0x10;
 
@@ -54,6 +57,9 @@ public static class VirtualKeys
 
     /// <summary>The letter D.</summary>
     public const int D = 0x44;
+
+    /// <summary>The letter P.</summary>
+    public const int P = 0x50;
 
     /// <summary>Left Windows key.</summary>
     public const int LeftWin = 0x5B;
@@ -132,6 +138,30 @@ public enum ShortcutCommand
 
     /// <summary>Show every hidden window and pause Deskswap; when paused, resume.</summary>
     TogglePause,
+
+    /// <summary>Move the focused window to the previous free desktop; its monitor follows.</summary>
+    MoveWindowToPreviousDesktop,
+
+    /// <summary>Move the focused window to the next free desktop; its monitor follows.</summary>
+    MoveWindowToNextDesktop,
+
+    /// <summary>Move the focused window to desktop N (the argument).</summary>
+    MoveWindowToDesktop,
+
+    /// <summary>Pin the focused window to every desktop of its monitor, or unpin it.</summary>
+    TogglePinWindow,
+
+    /// <summary>Open the overview on every monitor, or close it (overview-ux.md §2).</summary>
+    ToggleOverview,
+
+    /// <summary>Show every window of the focused app on every desktop, or close that view (overview-ux.md §4).</summary>
+    ToggleAppWindows,
+
+    /// <summary>
+    /// Esc while the overview is open: cancel a rename or a drag, else close it. Bound only while the overview is
+    /// open, so Esc works even if Windows didn't give the overview the keyboard.
+    /// </summary>
+    CloseOverview,
 }
 
 /// <summary>A command with its argument (the desktop number for <see cref="ShortcutCommand.GoToDesktop"/>).</summary>
@@ -152,7 +182,8 @@ public sealed class ShortcutMap
         ArgumentNullException.ThrowIfNull(bindings);
         foreach (var chord in bindings.Keys)
         {
-            if (VirtualKeys.ModifierOf(chord.VirtualKey) != KeyModifiers.None || chord.Modifiers == KeyModifiers.None)
+            bool bareEscape = chord.VirtualKey == VirtualKeys.Escape && chord.Modifiers == KeyModifiers.None;
+            if (VirtualKeys.ModifierOf(chord.VirtualKey) != KeyModifiers.None || (chord.Modifiers == KeyModifiers.None && !bareEscape))
             {
                 throw new ArgumentException($"Invalid shortcut {chord}.", nameof(bindings));
             }
@@ -161,15 +192,26 @@ public sealed class ShortcutMap
         _bindings = new ReadOnlyDictionary<KeyChord, ShortcutAction>(new Dictionary<KeyChord, ShortcutAction>(bindings));
     }
 
-    /// <summary>Gets the default bindings for M1 (design §6.1).</summary>
+    /// <summary>Gets the default bindings (design §6.1).</summary>
     public static ShortcutMap Defaults { get; } = CreateDefaults();
 
     /// <summary>Gets all bindings.</summary>
     public IReadOnlyDictionary<KeyChord, ShortcutAction> Bindings => _bindings;
 
-    /// <summary>Returns a map with only the bindings for one command, e.g. the pause toggle while paused.</summary>
+    /// <summary>
+    /// Gets these bindings plus the keys the overview needs even without keyboard focus: Esc alone closes it
+    /// (overview-ux.md §2). Esc is never bound otherwise.
+    /// </summary>
+    /// <returns>The extended map.</returns>
+    public ShortcutMap WhileOverviewOpen() =>
+        new(new Dictionary<KeyChord, ShortcutAction>(_bindings)
+        {
+            [new KeyChord(KeyModifiers.None, VirtualKeys.Escape)] = new(ShortcutCommand.CloseOverview),
+        });
+
+    /// <summary>Gets a map with only the bindings of one command (e.g. the pause toggle while paused).</summary>
     /// <param name="command">The command to keep.</param>
-    /// <returns>The filtered map.</returns>
+    /// <returns>The reduced map.</returns>
     public ShortcutMap Only(ShortcutCommand command) =>
         new(_bindings.Where(pair => pair.Value.Command == command).ToDictionary(pair => pair.Key, pair => pair.Value));
 
@@ -189,11 +231,18 @@ public sealed class ShortcutMap
             [new(winCtrl, VirtualKeys.D)] = new(ShortcutCommand.AddDesktop),
             [new(winCtrl, VirtualKeys.F4)] = new(ShortcutCommand.RemoveDesktop),
             [new(winCtrl | KeyModifiers.Shift, VirtualKeys.F12)] = new(ShortcutCommand.TogglePause),
+            [new(winCtrl | KeyModifiers.Shift, VirtualKeys.Left)] = new(ShortcutCommand.MoveWindowToPreviousDesktop),
+            [new(winCtrl | KeyModifiers.Shift, VirtualKeys.Right)] = new(ShortcutCommand.MoveWindowToNextDesktop),
+            [new(winCtrl | KeyModifiers.Shift, VirtualKeys.P)] = new(ShortcutCommand.TogglePinWindow),
+            [new(KeyModifiers.Win, VirtualKeys.Tab)] = new(ShortcutCommand.ToggleOverview),
+            [new(winCtrl, VirtualKeys.Up)] = new(ShortcutCommand.ToggleOverview),
+            [new(winCtrl, VirtualKeys.Down)] = new(ShortcutCommand.ToggleAppWindows),
         };
 
         for (int n = 1; n <= 9; n++)
         {
             bindings[new(winCtrl, VirtualKeys.Digit(n))] = new(ShortcutCommand.GoToDesktop, n);
+            bindings[new(winCtrl | KeyModifiers.Shift, VirtualKeys.Digit(n))] = new(ShortcutCommand.MoveWindowToDesktop, n);
         }
 
         return new ShortcutMap(bindings);

@@ -46,4 +46,14 @@ public class WindowGeometryTests
 
         Assert.Equal(ScreenRect.FromSize(-1280, 0, 640, 480), moved);
     }
+
+    [Fact]
+    public void Intersect_returns_the_overlap_or_null()
+    {
+        var window = ScreenRect.FromSize(1800, 1000, 600, 300);
+
+        Assert.Equal(new ScreenRect(1800, 1000, 1920, 1080), window.Intersect(new ScreenRect(0, 0, 1920, 1080)));
+        Assert.Equal(window, window.Intersect(new ScreenRect(0, 0, 4000, 4000)));
+        Assert.Null(window.Intersect(new ScreenRect(-1280, 0, 0, 984)));
+    }
 }

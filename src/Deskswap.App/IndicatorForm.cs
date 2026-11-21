@@ -55,8 +55,10 @@ internal sealed class IndicatorForm : Form
     /// <param name="title">The main line, e.g. "Desktop 3" or the desktop's name.</param>
     /// <param name="subtitle">An optional second line.</param>
     /// <param name="monitorBounds">The monitor's bounds in physical pixels.</param>
-    public void Present(string title, string? subtitle, Rectangle monitorBounds)
+    /// <param name="durationMs">How long it stays; longer for text meant to be read.</param>
+    public void Present(string title, string? subtitle, Rectangle monitorBounds, int durationMs = 1100)
     {
+        _hideTimer.Interval = durationMs;
         _title = title;
         _subtitle = subtitle;
 

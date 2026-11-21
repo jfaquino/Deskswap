@@ -8,7 +8,7 @@ namespace Deskswap.Core;
 /// The pool is pure state: operations never touch real windows. They return <see cref="PoolChanges"/> that the
 /// platform layer applies. Not thread-safe; use it from the UI thread only.
 /// </remarks>
-public sealed class DesktopPool
+public sealed partial class DesktopPool
 {
     /// <summary>The maximum number of desktops in the pool (as on macOS).</summary>
     public const int MaxDesktops = 16;
@@ -17,6 +17,10 @@ public sealed class DesktopPool
     private readonly List<MonitorId> _monitors = [];
     private readonly Dictionary<MonitorId, DesktopState> _shown = [];
     private readonly Dictionary<WindowId, DesktopState> _windowDesktop = [];
+    private readonly HashSet<WindowId> _pinned = [];
+
+    /// <summary>The desktop each disconnected monitor showed, so it gets it back on reconnect (design §4).</summary>
+    private readonly Dictionary<MonitorId, DesktopState> _remembered = [];
 
     private DesktopPool()
     {
@@ -111,11 +115,27 @@ public sealed class DesktopPool
             pool.SetShown(monitor, free);
         }
 
+        foreach (var (monitor, id) in savedMapping)
+        {
+            if (!pool._shown.ContainsKey(monitor) && byId.TryGetValue(id, out var desktop) && desktop.ShownOn is null)
+            {
+                pool._remembered[monitor] = desktop;
+            }
+        }
+
         foreach (var assignment in snapshot.Windows)
         {
             if (byId.TryGetValue(assignment.Desktop, out var desktop) && !pool._windowDesktop.ContainsKey(assignment.Window))
             {
                 pool.Assign(assignment.Window, desktop);
+            }
+        }
+
+        foreach (var window in snapshot.Pinned ?? [])
+        {
+            if (!pool._windowDesktop.ContainsKey(window))
+            {
+                pool._pinned.Add(window);
             }
         }
 
@@ -126,15 +146,19 @@ public sealed class DesktopPool
     /// <returns>A snapshot of the current state.</returns>
     public PoolSnapshot ToSnapshot() => new(
         [.. _desktops.Select(d => new DesktopSnapshot(d.Id, d.Name, d.LastMonitor))],
-        [.. _monitors.Select(m => new MonitorAssignment(m, _shown[m].Id))],
-        [.. _windowDesktop.Select(pair => new WindowAssignment(pair.Key, pair.Value.Id))]);
+        [
+            .. _monitors.Select(m => new MonitorAssignment(m, _shown[m].Id)),
+            .. _remembered.Select(pair => new MonitorAssignment(pair.Key, pair.Value.Id)),
+        ],
+        [.. _windowDesktop.Select(pair => new WindowAssignment(pair.Key, pair.Value.Id))],
+        [.. _pinned]);
 
     // ---------------------------------------------------------------- queries
 
     /// <summary>Gets a read-only view of every desktop, in order.</summary>
     /// <returns>The desktops; index 0 is desktop 1.</returns>
     public IReadOnlyList<DesktopInfo> GetDesktops() =>
-        [.. _desktops.Select((d, index) => new DesktopInfo(d.Id, index + 1, d.Name, d.ShownOn, [.. d.Windows]))];
+        [.. _desktops.Select((d, index) => new DesktopInfo(d.Id, index + 1, d.Name, d.ShownOn, [.. d.Windows], d.LastMonitor))];
 
     /// <summary>Gets the desktop a monitor shows.</summary>
     /// <param name="monitor">A connected monitor.</param>
@@ -323,14 +347,7 @@ public sealed class DesktopPool
         }
         else
         {
-            if (removed.LastMonitor is { } from)
-            {
-                foreach (var window in removed.Windows)
-                {
-                    changes.Relocate(window, from, target);
-                }
-            }
-
+            RelocateDesktopWindows(removed, target, changes);
             foreach (var window in removed.Windows)
             {
                 changes.Show(window);
@@ -339,6 +356,11 @@ public sealed class DesktopPool
             MoveAllWindows(removed, targetDesktop);
             _desktops.Remove(removed);
             changes.Indicate(IndicatorFor(target, targetDesktop, IndicatorKind.Removed));
+        }
+
+        foreach (var disconnected in _remembered.Where(pair => pair.Value == removed).Select(pair => pair.Key).ToList())
+        {
+            _remembered.Remove(disconnected);
         }
 
         return changes.Build();
@@ -358,112 +380,6 @@ public sealed class DesktopPool
 
         state.Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
         return true;
-    }
-
-    // ---------------------------------------------------------------- windows (design §3.4, §5.1)
-
-    /// <summary>Adds a new window to the desktop shown on the monitor it appeared on.</summary>
-    /// <param name="window">The window.</param>
-    /// <param name="monitor">The monitor the window appeared on.</param>
-    /// <returns><see langword="true"/> if the window was added; <see langword="false"/> if it is already managed or the monitor is unknown.</returns>
-    public bool AddWindow(WindowId window, MonitorId monitor)
-    {
-        if (_windowDesktop.ContainsKey(window) || !_shown.TryGetValue(monitor, out var desktop))
-        {
-            return false;
-        }
-
-        Assign(window, desktop);
-        return true;
-    }
-
-    /// <summary>Forgets a window (it was closed or is no longer eligible).</summary>
-    /// <param name="window">The window.</param>
-    /// <returns><see langword="true"/> if the window was managed.</returns>
-    public bool RemoveWindow(WindowId window)
-    {
-        if (!_windowDesktop.Remove(window, out var desktop))
-        {
-            return false;
-        }
-
-        desktop.Windows.Remove(window);
-        return true;
-    }
-
-    /// <summary>Reassigns a window the user moved to another monitor to the desktop shown there.</summary>
-    /// <param name="window">The window.</param>
-    /// <param name="monitor">The monitor the window is on now.</param>
-    /// <returns><see langword="true"/> if the window changed desktop.</returns>
-    public bool MoveWindowToMonitor(WindowId window, MonitorId monitor)
-    {
-        if (!_windowDesktop.TryGetValue(window, out var from) || !_shown.TryGetValue(monitor, out var to) || from == to)
-        {
-            return false;
-        }
-
-        Unassign(window, from);
-        Assign(window, to);
-        return true;
-    }
-
-    /// <summary>
-    /// Brings the pool in line with what the platform observes: adopts new visible windows, forgets vanished
-    /// ones, follows windows moved to another monitor, and hides or shows windows whose visibility is wrong.
-    /// </summary>
-    /// <param name="observed">Every eligible window, plus every window Deskswap hid.</param>
-    /// <returns>The changes needed to restore the invariants.</returns>
-    public PoolChanges Reconcile(IEnumerable<ObservedWindow> observed)
-    {
-        ArgumentNullException.ThrowIfNull(observed);
-        var changes = new ChangeBuilder();
-        var seen = new HashSet<WindowId>();
-
-        foreach (var window in observed)
-        {
-            seen.Add(window.Id);
-            if (!_shown.TryGetValue(window.Monitor, out var desktopOnMonitor))
-            {
-                continue;
-            }
-
-            if (!_windowDesktop.TryGetValue(window.Id, out var desktop))
-            {
-                if (window.IsVisible)
-                {
-                    Assign(window.Id, desktopOnMonitor);
-                }
-
-                continue;
-            }
-
-            if (window.IsVisible)
-            {
-                if (desktop.ShownOn is null)
-                {
-                    // M1: enforce the model. M2 (design §5.4) replaces this with activation: a window that
-                    // shows itself while its desktop is hidden switches its monitor to that desktop.
-                    changes.Hide(window.Id);
-                }
-                else if (desktop.ShownOn != window.Monitor)
-                {
-                    Unassign(window.Id, desktop);
-                    Assign(window.Id, desktopOnMonitor);
-                }
-            }
-            else if (desktop.ShownOn is { } shownOn)
-            {
-                changes.Relocate(window.Id, window.Monitor, shownOn);
-                changes.Show(window.Id);
-            }
-        }
-
-        foreach (var window in _windowDesktop.Keys.Where(w => !seen.Contains(w)).ToList())
-        {
-            RemoveWindow(window);
-        }
-
-        return changes.Build();
     }
 
     // ---------------------------------------------------------------- internals
@@ -533,7 +449,10 @@ public sealed class DesktopPool
     }
 
     /// <summary>Shows a desktop no monitor shows on <paramref name="target"/>, hiding the one it showed.</summary>
-    private void ShowOn(MonitorId target, DesktopState incoming, IndicatorKind kind, ChangeBuilder changes)
+    /// <param name="fromActualPosition">
+    /// Move the incoming windows from wherever they actually are, e.g. when one of them is already on the target.
+    /// </param>
+    private void ShowOn(MonitorId target, DesktopState incoming, IndicatorKind kind, ChangeBuilder changes, bool fromActualPosition = false)
     {
         var outgoing = _shown[target];
         foreach (var window in outgoing.Windows)
@@ -541,7 +460,7 @@ public sealed class DesktopPool
             changes.Hide(window);
         }
 
-        RelocateDesktopWindows(incoming, target, changes);
+        RelocateDesktopWindows(incoming, target, changes, fromActualPosition);
         foreach (var window in incoming.Windows)
         {
             changes.Show(window);
@@ -577,14 +496,21 @@ public sealed class DesktopPool
         changes.Indicate(IndicatorFor(other, a, IndicatorKind.Switched));
     }
 
-    private static void RelocateDesktopWindows(DesktopState desktop, MonitorId to, ChangeBuilder changes)
+    /// <summary>
+    /// Moves a desktop's windows to <paramref name="to"/>. They are on the monitor that last showed the desktop; when
+    /// that monitor is unknown or disconnected, they move from wherever they actually are.
+    /// </summary>
+    private void RelocateDesktopWindows(DesktopState desktop, MonitorId to, ChangeBuilder changes, bool fromActualPosition = false)
     {
-        if (desktop.LastMonitor is { } from && from != to)
+        MonitorId? from = !fromActualPosition && desktop.LastMonitor is { } last && _monitors.Contains(last) ? last : null;
+        if (from == to)
         {
-            foreach (var window in desktop.Windows)
-            {
-                changes.Relocate(window, from, to);
-            }
+            return;
+        }
+
+        foreach (var window in desktop.Windows)
+        {
+            changes.Relocate(window, from, to);
         }
     }
 

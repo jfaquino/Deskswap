@@ -1,9 +1,22 @@
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using Microsoft.Win32.SafeHandles;
 using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Security;
 using Windows.Win32.System.Threading;
 
 namespace Deskswap.Platform;
+
+/// <summary>Whether Deskswap itself runs as administrator.</summary>
+public static class Elevation
+{
+    /// <summary>
+    /// Gets a value indicating whether Deskswap runs at high integrity (as administrator). It then receives keys
+    /// typed into other administrator apps and can manage their windows (design §6.4).
+    /// </summary>
+    public static bool IsElevated => ProcessInfo.CurrentIntegrityLevel >= 0x3000;
+}
 
 /// <summary>Reads process details needed for window identity (start time) and, later, rules (image path).</summary>
 internal static class ProcessInfo
@@ -41,6 +54,49 @@ internal static class ProcessInfo
         return PInvoke.QueryFullProcessImageName(process, PROCESS_NAME_FORMAT.PROCESS_NAME_WIN32, buffer, ref length)
             ? buffer[..(int)length].ToString()
             : null;
+    }
+
+    /// <summary>Gets the mandatory integrity level of the current process (e.g. 0x2000 medium, 0x3000 high).</summary>
+    public static int CurrentIntegrityLevel { get; } = ReadIntegrityLevel(new SafeFileHandle(PInvoke.GetCurrentProcess(), ownsHandle: false)) ?? 0x2000;
+
+    /// <summary>
+    /// Gets a value indicating whether a process runs at a higher integrity level than Deskswap (e.g. an app run as
+    /// administrator). Windows won't let Deskswap hide such windows. A process whose level can't be read is treated
+    /// as higher, because that is the usual reason it can't be read.
+    /// </summary>
+    /// <param name="processId">The process id.</param>
+    /// <returns><see langword="true"/> if Deskswap can't manage the process's windows.</returns>
+    public static bool IsMoreTrustedThanUs(uint processId)
+    {
+        using var process = Open(processId);
+        return process.IsInvalid || (ReadIntegrityLevel(process) ?? int.MaxValue) > CurrentIntegrityLevel;
+    }
+
+    private static unsafe int? ReadIntegrityLevel(SafeHandle process)
+    {
+        if (!PInvoke.OpenProcessToken(process, TOKEN_ACCESS_MASK.TOKEN_QUERY, out var token))
+        {
+            return null;
+        }
+
+        using (token)
+        {
+            PInvoke.GetTokenInformation(token, TOKEN_INFORMATION_CLASS.TokenIntegrityLevel, null, 0, out uint size);
+            if (size == 0)
+            {
+                return null;
+            }
+
+            byte* buffer = stackalloc byte[(int)size];
+            if (!PInvoke.GetTokenInformation(token, TOKEN_INFORMATION_CLASS.TokenIntegrityLevel, buffer, size, out _))
+            {
+                return null;
+            }
+
+            var label = (TOKEN_MANDATORY_LABEL*)buffer;
+            byte count = *PInvoke.GetSidSubAuthorityCount(label->Label.Sid);
+            return count == 0 ? null : (int)*PInvoke.GetSidSubAuthority(label->Label.Sid, (uint)(count - 1));
+        }
     }
 
     private static SafeFileHandle Open(uint processId) =>

@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Deskswap.Core\Deskswap.Core.csproj" />
     <ProjectReference Include="..\Deskswap.Platform\Deskswap.Platform.csproj" />
+    <ProjectReference Include="..\Deskswap.Ui\Deskswap.Ui.csproj" />
   </ItemGroup>
 
 </Project>

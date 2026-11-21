@@ -16,6 +16,15 @@ public class MonitorLayoutTests
     }
 
     [Fact]
+    public void A_fresh_capture_matches_the_current_displays()
+    {
+        var layout = MonitorLayout.Capture();
+
+        Assert.True(layout.MatchesCurrentDisplays());
+        Assert.Equal(MonitorLayout.ReadDisplaySignature(), layout.Signature);
+    }
+
+    [Fact]
     public void Monitor_under_cursor_is_part_of_the_layout()
     {
         var layout = MonitorLayout.Capture();

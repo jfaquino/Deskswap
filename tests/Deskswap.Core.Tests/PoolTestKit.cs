@@ -56,5 +56,6 @@ internal static class PoolTestKit
 
         var allWindows = desktops.SelectMany(d => d.Windows).ToList();
         Assert.Equal(allWindows.Count, allWindows.Distinct().Count());
+        Assert.DoesNotContain(allWindows, pool.IsPinned);
     }
 }
